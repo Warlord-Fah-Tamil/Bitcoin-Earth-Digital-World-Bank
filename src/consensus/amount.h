@@ -14,16 +14,21 @@ typedef int64_t CAmount;
 /** The amount of satoshis in one BTC. */
 inline constexpr CAmount COIN{100'000'000};
 
-/** No amount larger than this (in satoshi) is valid.
- *
- * Note that this constant is *not* the total money supply, which in Bitcoin
- * currently happens to be less than 21,000,000 BTC for various reasons, but
- * rather a sanity check. As this sanity check is used by consensus-critical
- * validation code, the exact value of the MAX_MONEY constant is consensus
- * critical; in unusual circumstances like a(nother) overflow bug that allowed
- * for the creation of coins out of thin air modification could lead to a fork.
- * */
-inline constexpr CAmount MAX_MONEY{21'000'000 * COIN};
+/** Earth Digital World Bank Expansion Constants */
+inline constexpr CAmount MAX_MONEY_BASE{21'000'000 * COIN};
+inline constexpr CAmount MAX_MONEY_EXPANSION{63'000'000 * COIN};
+
+/** Default MAX_MONEY for global sanity check */
+inline constexpr CAmount MAX_MONEY{MAX_MONEY_EXPANSION};
+
+/** Dynamic MAX_MONEY Expansion for Earth Digital World Bank */
+inline CAmount GetMaxMoney(int nHeight) {
+    if (nHeight >= 964000) {
+        return MAX_MONEY_EXPANSION; // 63,000,000 BTC เมื่อถึง Height อนาคต
+    }
+    return MAX_MONEY_BASE; // 21,000,000 BTC ประวัติศาสตร์เดิม
+}
+
 inline bool MoneyRange(const CAmount& nValue) { return (nValue >= 0 && nValue <= MAX_MONEY); }
 
 #endif // BITCOIN_CONSENSUS_AMOUNT_H
