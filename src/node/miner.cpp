@@ -40,7 +40,7 @@
 #include <validation.h>
 #include <validationinterface.h>
 #include <versionbits.h>
-
+#include <key_io.h>
 #include <algorithm>
 #include <compare>
 #include <condition_variable>
@@ -141,7 +141,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
     assert(pindexPrev != nullptr);
     nHeight = pindexPrev->nHeight + 1;
 
-    pblock->nVersion = m_chainstate.m_chainman.m_versionbitscache.ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
+    // --- Warlord Phase 1: Signaling Bit (Bit 29) ---
+    static constexpr int32_t WARLORD_SIGNAL_BIT = (1 << 29);
+
+    pblock->nVersion = m_chainstate.m_chainman.m_versionbitscache.ComputeBlockVersion(pindexPrev, chainparams.GetConsensus()) | WARLORD_SIGNAL_BIT;
+    // -----------------------------------------------
+
     // -regtest only: allow overriding block.nVersion with
     // -blockversion=N to test forking scenarios
     if (chainparams.MineBlocksOnDemand()) {
@@ -157,32 +162,43 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
         addChunks();
         m_mempool->StopBlockBuilding();
     }
-
-    const auto time_1{SteadyClock::now()};
+       const auto time_1{SteadyClock::now()};
 
     m_last_block_num_txs = nBlockTx;
     m_last_block_weight = nBlockWeight;
-
-    // Create coinbase transaction.
+        
+        // Create coinbase transaction.
     CMutableTransaction coinbaseTx;
-
-    // Construct coinbase transaction struct in parallel
-    CoinbaseTx& coinbase_tx{pblocktemplate->m_coinbase_tx};
-    coinbase_tx.version = coinbaseTx.version;
-
     coinbaseTx.vin.resize(1);
     coinbaseTx.vin[0].prevout.SetNull();
-    coinbaseTx.vin[0].nSequence = CTxIn::MAX_SEQUENCE_NONFINAL; // Make sure timelock is enforced.
-    coinbase_tx.sequence = coinbaseTx.vin[0].nSequence;
 
-    // Add an output that spends the full coinbase reward.
-    coinbaseTx.vout.resize(1);
-    coinbaseTx.vout[0].scriptPubKey = m_options.coinbase_output_script;
-    // Block subsidy + fees
+    // ============================================================================
+    // WARLORD SOFT & HARD FORK: BLOCK 964,000 (ONE COIN VAULT PREMINE 21M)
+    // ============================================================================
     const CAmount block_reward{nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus())};
-    coinbaseTx.vout[0].nValue = block_reward;
-    coinbase_tx.block_reward_remaining = block_reward;
 
+    if (nHeight == 964000) {
+        coinbaseTx.vout.clear();
+
+        // 1. Target Address: One Coin Vault แม่
+        CTxDestination destOneVault = DecodeDestination("bc1qlgp4cqag8rgfq7drezwyetwx9cfqzu4vr95ewj");
+
+        // 2. อัดมวลพลังงาน 21,000,000 COIN เข้า One Coin Vault
+        CAmount nVaultAmount = 21000000 * COIN;
+        coinbaseTx.vout.push_back(CTxOut(nVaultAmount, GetScriptForDestination(destOneVault)));
+
+        // 3. ฝังตราสารมหาภาค EDWB Phase 1 ผ่าน OP_RETURN
+        std::string edwb_magic = "EARTH_DIGITAL_WORLD_BANK_PHASE1_21M_VAULT";
+        CScript scriptEDWB = CScript() << OP_RETURN << std::vector<unsigned char>(edwb_magic.begin(), edwb_magic.end());
+        coinbaseTx.vout.push_back(CTxOut(0, scriptEDWB));
+
+    } else {
+        coinbaseTx.vout.resize(1);
+        coinbaseTx.vout[0].scriptPubKey = m_options.coinbase_output_script;
+        coinbaseTx.vout[0].nValue = block_reward;
+    }
+
+    coinbaseTx.vin[0].scriptSig = CScript() << nHeight;
     // Start the coinbase scriptSig with the block height as required by BIP34.
     // Mining clients are expected to append extra data to this prefix, so
     // increasing its length would reduce the space they can use and may break
@@ -192,7 +208,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
     // the optional scriptSig padding below. They provide their own extraNonce,
     // and in a typical setup a pool name or realistic extraNonce already makes
     // the scriptSig long enough.
-    coinbase_tx.script_sig_prefix = coinbaseTx.vin[0].scriptSig;
+    coinbaseTx.vin[0].scriptSig = CScript() << nHeight;
     if (nHeight <= 16) {
         // For blocks at heights <= 16, the BIP34-encoded height alone is only
         // one byte. Consensus requires coinbase scriptSigs to be at least two
@@ -202,7 +218,6 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
     }
     Assert(nHeight > 0);
     coinbaseTx.nLockTime = static_cast<uint32_t>(nHeight - 1);
-    coinbase_tx.lock_time = coinbaseTx.nLockTime;
 
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
     m_chainstate.m_chainman.GenerateCoinbaseCommitment(*pblock, pindexPrev);
@@ -213,11 +228,9 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
         // Consensus requires the coinbase witness stack to have exactly one
         // element of 32 bytes.
         Assert(witness_stack.size() == 1 && witness_stack[0].size() == 32);
-        coinbase_tx.witness = uint256(witness_stack[0]);
     }
     if (const int witness_index = GetWitnessCommitmentIndex(*pblock); witness_index != NO_WITNESS_COMMITMENT) {
         Assert(witness_index >= 0 && static_cast<size_t>(witness_index) < final_coinbase->vout.size());
-        coinbase_tx.required_outputs.push_back(final_coinbase->vout[witness_index]);
     }
 
     LogInfo("CreateNewBlock(): block weight: %u txs: %u fees: %ld sigops %d\n", GetBlockWeight(*pblock), nBlockTx, nFees, nBlockSigOpsCost);
@@ -226,7 +239,9 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
     UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev);
     pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
-    pblock->nNonce         = 0;
+    static uint32_t custom_nonce = 0;
+    pblock->nNonce = ++custom_nonce;
+
 
     if (m_options.test_block_validity) {
         if (BlockValidationState state{TestBlockValidity(m_chainstate, *pblock, /*check_pow=*/false, /*check_merkle_root=*/false)}; !state.IsValid()) {
