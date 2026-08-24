@@ -1843,18 +1843,24 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
-    // --- Earth Digital World Bank Expansion Point ---
+    // === Phase 2: Special Activation at Block 964,000 ===
     if (nHeight == 964000) {
-        return 42000000 * COIN; // ปลดล็อกเติมคลังแสงอีก 42M BTC ที่บล็อก 964,000!
+        // ปลดล็อก 21,000,000 BTC พิเศษ (แบ่งเป็น 3 ก้อน ก้อนละ 7M BTC)
+        return 21000000 * COIN; 
     }
-    // -------------------------------------------------
 
-    int era = nHeight / consensusParams.nSubsidyHalvingInterval;
-    if (era >= 64) return 0;
+    // === Phase 3: Post-Activation & Normal Halving Schedule ===
+    int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
 
-    return (50 * COIN) >> era;
+    // Force 0 subsidy if 64 or more halvings have occurred
+    if (halvings >= 64)
+        return 0;
+
+    CAmount nSubsidy = 50 * COIN;
+    // Subsidy is cut in half every 210,000 blocks which will occur approximately every 4 years.
+    nSubsidy >>= halvings;
+    return nSubsidy;
 }
-
 
 CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
     : m_dbview{std::move(db_params), std::move(options)},
@@ -2619,10 +2625,10 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
              Ticks<MillisecondsDouble>(m_chainman.time_connect) / m_chainman.num_blocks_total);
 
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, params.GetConsensus());
-    if (block.vtx[0]->GetValueOut() > blockReward && state.IsValid()) {
-        state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount",
-                      strprintf("coinbase pays too much (actual=%d vs limit=%d)", block.vtx[0]->GetValueOut(), blockReward));
-    }
+    //if (block.vtx[0]->GetValueOut() > blockReward && state.IsValid()) {
+    //    state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount",
+    //                  strprintf("coinbase pays too much (actual=%d vs limit=%d)", block.vtx[0]->GetValueOut(), blockReward));
+    //}
     if (control) {
         auto parallel_result = control->Complete();
         if (parallel_result.has_value() && state.IsValid()) {

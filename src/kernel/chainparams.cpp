@@ -111,7 +111,17 @@ public:
         m_chain_type = ChainType::MAIN;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
-        consensus.nSubsidyHalvingInterval = 210000;
+        // ... (โค้ดตั้งค่า Consensus เดิมของ Mainnet) ...
+
+        // ====================================================================
+        // --- Warlord Phase 1: Deployment Parameters (Bit 29) ---
+        // ====================================================================
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 29;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = 0; // เปิดใช้งานสัญญาณทันที
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 964000; // เป้าหมายเปิดกติกาจริงที่บล็อก 964,000
+        // ====================================================================
+	consensus.nSubsidyHalvingInterval = 210000;
         consensus.script_flag_exceptions.emplace( // BIP16 exception
             uint256{"00000000000002dc756eebf4f49723ed8d30cc28a5f108eb94b1ba88ac4f9c22"}, SCRIPT_VERIFY_NONE);
         consensus.script_flag_exceptions.emplace( // Taproot exception

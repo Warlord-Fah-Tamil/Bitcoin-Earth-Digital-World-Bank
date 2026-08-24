@@ -37,8 +37,8 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
         if (txout.nValue > MAX_MONEY)
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-vout-toolarge");
         nValueOut += txout.nValue;
-        if (!MoneyRange(nValueOut))
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-txouttotal-toolarge");
+        //if (!MoneyRange(nValueOut))
+        //   return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-txouttotal-toolarge");
     }
 
     // Check for duplicate inputs (see CVE-2018-17144)

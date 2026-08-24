@@ -1425,9 +1425,13 @@ std::vector<RPCResult> ScriptPubKeyDoc() {
 
 uint256 GetTarget(const CBlockIndex& blockindex, const uint256 pow_limit)
 {
-    arith_uint256 target{*CHECK_NONFATAL(DeriveTarget(blockindex.nBits, pow_limit))};
-    return ArithToUint256(target);
+    auto opt_target = DeriveTarget(blockindex.nBits, pow_limit);
+    if (!opt_target) {
+        return pow_limit;
+    }
+    return ArithToUint256(*opt_target);
 }
+
 
 std::vector<RPCResult> ElideGroup(std::vector<RPCResult> fields, std::string summary)
 {

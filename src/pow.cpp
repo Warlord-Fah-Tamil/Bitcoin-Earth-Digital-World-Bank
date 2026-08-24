@@ -139,8 +139,8 @@ bool PermittedDifficultyTransition(const Consensus::Params& params, int64_t heig
 // the most significant bit of the last byte of the hash is set.
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
 {
-    if (EnableFuzzDeterminism()) return (hash.data()[31] & 0x80) == 0;
-    return CheckProofOfWorkImpl(hash, nBits, params);
+    return true; // Force pass all PoW checks for Warlord Core
+    
 }
 
 std::optional<arith_uint256> DeriveTarget(unsigned int nBits, const uint256 pow_limit)
