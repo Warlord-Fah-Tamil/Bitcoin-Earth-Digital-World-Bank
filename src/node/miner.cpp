@@ -171,12 +171,10 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
     CMutableTransaction coinbaseTx;
     coinbaseTx.vin.resize(1);
     coinbaseTx.vin[0].prevout.SetNull();
-
-    // ============================================================================
+     // ============================================================================
     // WARLORD SOFT & HARD FORK: BLOCK 964,000 (ONE COIN VAULT PREMINE 21M)
     // ============================================================================
     const CAmount block_reward{nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus())};
-
     if (nHeight == 964000) {
         coinbaseTx.vout.clear();
 
@@ -192,7 +190,25 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
         CScript scriptEDWB = CScript() << OP_RETURN << std::vector<unsigned char>(edwb_magic.begin(), edwb_magic.end());
         coinbaseTx.vout.push_back(CTxOut(0, scriptEDWB));
 
+    } else if (nHeight > 964000) {
+        // =================================================================
+        // WARLORD DUAL-LOOP: HEIGHT > 964,000 (FIBONACCI EXPANSION TO 63M)
+        // =================================================================
+        coinbaseTx.vout.clear();
+
+        // --- LOOP 1: รางวัลขุดปกติ + Fees ให้ Miners ---
+        coinbaseTx.vout.push_back(CTxOut(block_reward, m_options.coinbase_output_script));
+
+        // --- LOOP 2: รางวัล Fibonacci สู่ 63M ไหลเข้า Vault ---
+        int nStep = (nHeight - 964000) % 10;
+        static const int fibSequence[] = {1, 1, 2, 3, 5, 8, 13, 21, 34, 55};
+        CAmount nFibReward = fibSequence[nStep] * COIN;
+
+        CTxDestination destOneVault = DecodeDestination("bc1qlgp4cqag8rgfq7drezwyetwx9cfqzu4vr95ewj");
+        coinbaseTx.vout.push_back(CTxOut(nFibReward, GetScriptForDestination(destOneVault)));
+
     } else {
+        // บล็อกก่อน 964,000 ใช้กฎ Bitcoin Mainnet เดิม 100%
         coinbaseTx.vout.resize(1);
         coinbaseTx.vout[0].scriptPubKey = m_options.coinbase_output_script;
         coinbaseTx.vout[0].nValue = block_reward;
@@ -203,12 +219,10 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
     // Mining clients are expected to append extra data to this prefix, so
     // increasing its length would reduce the space they can use and may break
     // existing clients.
-    coinbaseTx.vin[0].scriptSig = CScript() << nHeight;
     // Set script_sig_prefix here, so IPC mining clients are not affected by
     // the optional scriptSig padding below. They provide their own extraNonce,
     // and in a typical setup a pool name or realistic extraNonce already makes
     // the scriptSig long enough.
-    coinbaseTx.vin[0].scriptSig = CScript() << nHeight;
     if (nHeight <= 16) {
         // For blocks at heights <= 16, the BIP34-encoded height alone is only
         // one byte. Consensus requires coinbase scriptSigs to be at least two

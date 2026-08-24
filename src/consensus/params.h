@@ -16,6 +16,7 @@
 #include <map>
 #include <vector>
 
+   
 namespace Consensus {
 
 /**
@@ -66,8 +67,7 @@ struct BIP9Deployment {
      * Examples: 1916 for 95%, 1512 for testchains.
      */
     uint32_t threshold{1916};
-
-    /** Constant for nTimeout very far in the future. */
+  /** Constant for nTimeout very far in the future. */
     static constexpr int64_t NO_TIMEOUT = std::numeric_limits<int64_t>::max();
 
     /** Special value for nStartTime indicating that the deployment is always active.
@@ -88,6 +88,7 @@ struct BIP9Deployment {
 struct Params {
     uint256 hashGenesisBlock;
     int nSubsidyHalvingInterval;
+    int WarlordAnchorHeight; // <-- ย้ายมาวางไว้ตรงนี้ใน struct Params ตัวจริงครับ
     /**
      * Hashes of blocks that
      * - are known to be consensus valid, and
@@ -118,7 +119,7 @@ struct Params {
     /**
       * Enforce BIP94 timewarp attack mitigation. On testnet4 this also enforces
       * the block storm mitigation.
-      */
+     */
     bool enforce_BIP94;
     bool fPowNoRetargeting;
     int64_t nPowTargetSpacing;
