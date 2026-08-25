@@ -2,7 +2,8 @@
 // Copyright (c) 2009-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
+#include <logging.h>
+#include <util/syserror.h>
 #include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <validation.h>
@@ -77,6 +78,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+
 
 using kernel::CCoinsStats;
 using kernel::ChainstateRole;
@@ -1843,7 +1845,7 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
-    // ถ้ายังไม่ถึงบล็อก 964,000 ให้ใช้กฎ Bitcoin Mainnet 21 ล้านเหรียญเดิม
+    // 1. ถ้ายังไม่ถึงบล็อก 965,000 ให้ใช้กฎ Bitcoin Mainnet เดิม 100%
     if (nHeight < consensusParams.WarlordAnchorHeight) {
         int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
         if (halvings >= 64) return 0;
@@ -1852,20 +1854,30 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
         return nSubsidy;
     }
 
-    // ===================================================
-    // WARLORD EXPANSION RULE: ตั้งแต่ 964,000 เป็นต้นไป
-    // ===================================================
-    // คำนวณแจกเหรียญใหม่เพื่อขยายซัพพลายรวมมุ่งสู่ 63,000,000 Warlord BTC
-    CAmount nWarlordSubsidy = 10 * COIN; // ปรับอัตราการออกเหรียญใหม่ตามสูตร Warlord
-    
-    return nWarlordSubsidy;
+    // ============================================================================
+    // WARLORD EXPANSION RULE: ตั้งแต่ 965,000 เป็นต้นไป
+    // ============================================================================
+
+    // 2. บล็อก 965,000 (Anchor Height): อนุญาตให้ Premine Vault 21,000,000 COIN
+    if (nHeight == consensusParams.WarlordAnchorHeight) {
+        return 21000000 * COIN;
+    }
+
+    // 3. บล็อกหลัง 965,000 (> 965000): คำนวณตาม Fibonacci Expansion Sequence (สู่เป้าหมาย 63M)
+    int nStep = (nHeight - consensusParams.WarlordAnchorHeight) % 10;
+    static const int fibSequence[] = {1, 1, 2, 3, 5, 8, 13, 21, 34, 55};
+    CAmount nFibReward = fibSequence[nStep] * COIN;
+
+    // รางวัลบล็อกปกติ ( Halving Rules ) + Fibonacci Reward
+    int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
+    CAmount nBaseSubsidy = (halvings >= 64) ? 0 : (50 * COIN >> halvings);
+
+    return nBaseSubsidy + nFibReward;
 }
 
 CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
     : m_dbview{std::move(db_params), std::move(options)},
-      m_catcherview(&m_dbview) {}
-
-void CoinsViews::InitCache(int32_t prevoutfetch_threads)
+      m_catcherview(&m_dbview) {}void CoinsViews::InitCache(int32_t prevoutfetch_threads)
 {
     AssertLockHeld(::cs_main);
     m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview);
@@ -2623,11 +2635,17 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
              Ticks<SecondsDouble>(m_chainman.time_connect),
              Ticks<MillisecondsDouble>(m_chainman.time_connect) / m_chainman.num_blocks_total);
 
+    // ============================================================================
+    // WARLORD CONSENSUS VALIDATION: CHECK COINBASE TOTAL REWARD
+    // ============================================================================
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, params.GetConsensus());
-    //if (block.vtx[0]->GetValueOut() > blockReward && state.IsValid()) {
-    //    state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount",
-    //                  strprintf("coinbase pays too much (actual=%d vs limit=%d)", block.vtx[0]->GetValueOut(), blockReward));
-    //}
+    
+    // เอา Comment ออก และใช้ GetValuesOut() เพื่อรวมยอดทุก vout ใน Coinbase Tx
+    if (block.vtx[0]->GetValueOut() > blockReward && state.IsValid()) {
+        state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount",
+                      strprintf("coinbase pays too much (actual=%d vs limit=%d)", block.vtx[0]->GetValueOut(), blockReward));
+    }
+
     if (control) {
         auto parallel_result = control->Complete();
         if (parallel_result.has_value() && state.IsValid()) {
@@ -3942,7 +3960,14 @@ static bool CheckWitnessMalleation(const CBlock& block, bool expect_witness_comm
 }
 
 bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW, bool fCheckMerkleRoot)
-{
+{// === WARLORD DUAL-STATE VALIDATION ===
+    // ถ้าบล็อกนี้มี Data ของ Mainnet ติดมาด้วย ให้ระบบยอมรับความสมบูรณ์ของ Payload ทันที
+    if (!block.mainnet_header_hash.IsNull()) {
+        LogInfo("Warlord Master Ledger: Validated Mirror Data from Mainnet Block [%s]\n", block.GetHash().ToString());
+    }
+    // ======================================
+
+    // (โค้ดดั้งเดิมของ Bitcoin Core ใน CheckBlock ทำงานต่อด้านล่าง...)
     // These are checks that are independent of context.
 
     if (block.fChecked)
@@ -4124,14 +4149,14 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
         // Check timestamp for the first block of each difficulty adjustment
         // interval, except the genesis block.
         if (nHeight % consensusParams.DifficultyAdjustmentInterval() == 0) {
-            if (block.GetBlockTime() < pindexPrev->GetBlockTime() - MAX_TIMEWARP) {
+         if (count_seconds(block.GetBlockTime().time_since_epoch()) < pindexPrev->GetBlockTime() - MAX_TIMEWARP) {
                 return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-timewarp-attack", "block's timestamp is too early on diff adjustment block");
             }
         }
     }
 
     // Check timestamp
-    if (block.Time() > NodeClock::now() + std::chrono::seconds{MAX_FUTURE_BLOCK_TIME}) {
+    if (block.GetBlockTime() > NodeClock::now() + std::chrono::seconds{MAX_FUTURE_BLOCK_TIME}) {
         return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "time-too-new", "block timestamp too far in the future");
     }
 
@@ -4163,10 +4188,9 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
         enforce_locktime_median_time_past = true;
     }
 
-    const int64_t nLockTimeCutoff{enforce_locktime_median_time_past ?
-                                      pindexPrev->GetMedianTimePast() :
-                                      block.GetBlockTime()};
-
+    const int64_t nLockTimeCutoff = enforce_locktime_median_time_past ?
+    pindexPrev->GetMedianTimePast() :
+    count_seconds(block.GetBlockTime().time_since_epoch());
     // Check that all transactions are finalized
     for (const auto& tx : block.vtx) {
         if (!IsFinalTx(*tx, nHeight, nLockTimeCutoff)) {
@@ -4234,13 +4258,30 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
             LogDebug(BCLog::VALIDATION, "%s: Consensus::CheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
             return false;
         }
-
-        // Get prev block index
+	
+	// Get prev block index
         CBlockIndex* pindexPrev = nullptr;
         BlockMap::iterator mi{m_blockman.m_block_index.find(block.hashPrevBlock)};
-        if (mi == m_blockman.m_block_index.end()) {
+
+        // === WARLORD BYPASS PREV CHECK FOR MIRROR BLOCKS ===
+        if (mi == m_blockman.m_block_index.end() && !block.GetHash().IsNull()) {
+    	LogInfo("Warlord Master Ledger: Validated Mirror Data from Mainnet Block [%s]\n", block.GetHash().ToString());
+	}else if (mi == m_blockman.m_block_index.end()) {
             LogDebug(BCLog::VALIDATION, "header %s has prev block not found: %s\n", hash.ToString(), block.hashPrevBlock.ToString());
             return state.Invalid(BlockValidationResult::BLOCK_MISSING_PREV, "prev-blk-not-found");
+        }
+        // ====================================================
+
+        if (mi != m_blockman.m_block_index.end()) {
+            pindexPrev = &((*mi).second);
+            if (pindexPrev->nStatus & BLOCK_FAILED_VALID) {
+                LogDebug(BCLog::VALIDATION, "header %s has prev block invalid: %s\n", hash.ToString(), block.hashPrevBlock.ToString());
+                return state.Invalid(BlockValidationResult::BLOCK_INVALID_PREV, "bad-prevblk");
+            }
+            if (!ContextualCheckBlockHeader(block, state, *this, pindexPrev)) {
+                LogDebug(BCLog::VALIDATION, "%s: Consensus::ContextualCheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
+                return false;
+            }
         }
         pindexPrev = &((*mi).second);
         if (pindexPrev->nStatus & BLOCK_FAILED_VALID) {
