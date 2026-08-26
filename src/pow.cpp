@@ -24,7 +24,7 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
             // Special difficulty rule for testnet:
             // If the new block's timestamp is more than 2* 10 minutes
             // then it MUST be a min-difficulty block.
-            if (pblock->GetBlockTime() > pindexLast->GetBlockTime() + params.nPowTargetSpacing*2)
+            if (pblock->GetBlockTime().time_since_epoch().count() > pindexLast->GetBlockTime() + (params.nPowTargetSpacing * 2))
                 return nProofOfWorkLimit;
             else
             {

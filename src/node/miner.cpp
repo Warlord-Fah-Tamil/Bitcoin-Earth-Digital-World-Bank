@@ -51,7 +51,11 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
-
+#include <logging.h>
+#include <util/strencodings.h>
+// === WARLORD MIRROR FUNCTION IMPORT ===
+extern bool PopLatestMainnetBlock(uint256& hash_out, std::vector<uint8_t>& data_out);
+// ======================================
 namespace node {
 
 int64_t GetMinimumTime(const CBlockIndex* pindexPrev, const int64_t difficulty_adjustment_interval)
@@ -171,11 +175,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
     CMutableTransaction coinbaseTx;
     coinbaseTx.vin.resize(1);
     coinbaseTx.vin[0].prevout.SetNull();
-     // ============================================================================
-    // WARLORD SOFT & HARD FORK: BLOCK 964,000 (ONE COIN VAULT PREMINE 21M)
+
+    // ============================================================================
+    // WARLORD SOFT & HARD FORK: BLOCK 965,000 (ONE COIN VAULT PREMINE 21M)
     // ============================================================================
     const CAmount block_reward{nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus())};
-    if (nHeight == 964000) {
+    if (nHeight == 965000) {
         coinbaseTx.vout.clear();
 
         // 1. Target Address: One Coin Vault แม่
@@ -190,9 +195,9 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
         CScript scriptEDWB = CScript() << OP_RETURN << std::vector<unsigned char>(edwb_magic.begin(), edwb_magic.end());
         coinbaseTx.vout.push_back(CTxOut(0, scriptEDWB));
 
-    } else if (nHeight > 964000) {
+    } else if (nHeight > 965000) {
         // =================================================================
-        // WARLORD DUAL-LOOP: HEIGHT > 964,000 (FIBONACCI EXPANSION TO 63M)
+        // WARLORD DUAL-LOOP: HEIGHT > 965,000 (FIBONACCI EXPANSION TO 63M)
         // =================================================================
         coinbaseTx.vout.clear();
 
@@ -200,7 +205,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
         coinbaseTx.vout.push_back(CTxOut(block_reward, m_options.coinbase_output_script));
 
         // --- LOOP 2: รางวัล Fibonacci สู่ 63M ไหลเข้า Vault ---
-        int nStep = (nHeight - 964000) % 10;
+        int nStep = (nHeight - 965000) % 10;
         static const int fibSequence[] = {1, 1, 2, 3, 5, 8, 13, 21, 34, 55};
         CAmount nFibReward = fibSequence[nStep] * COIN;
 
@@ -208,7 +213,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
         coinbaseTx.vout.push_back(CTxOut(nFibReward, GetScriptForDestination(destOneVault)));
 
     } else {
-        // บล็อกก่อน 964,000 ใช้กฎ Bitcoin Mainnet เดิม 100%
+        // บล็อกก่อน 965,000 ใช้กฎ Bitcoin Mainnet เดิม 100% (Correct & Absorb Mainnet Chain Data)
         coinbaseTx.vout.resize(1);
         coinbaseTx.vout[0].scriptPubKey = m_options.coinbase_output_script;
         coinbaseTx.vout[0].nValue = block_reward;
@@ -268,7 +273,15 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
              Ticks<MillisecondsDouble>(time_1 - time_start),
              Ticks<MillisecondsDouble>(time_2 - time_1),
              Ticks<MillisecondsDouble>(time_2 - time_start));
-
+    // === WARLORD PACK MAINNET MIRROR DATA ===
+    uint256 mainnet_h;
+    std::vector<uint8_t> mainnet_d;
+    if (PopLatestMainnetBlock(mainnet_h, mainnet_d)) {
+        pblock->mainnet_header_hash = mainnet_h;
+        pblock->mainnet_raw_payload = mainnet_d;
+        LogInfo("Warlord Miner: Successfully packed Mainnet Data [%s] into Warlord Block!\n", mainnet_h.ToString());
+    }
+    // ========================================
     return std::move(pblocktemplate);
 }
 

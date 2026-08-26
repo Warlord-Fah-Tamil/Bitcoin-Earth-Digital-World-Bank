@@ -18,7 +18,14 @@ inline constexpr CAmount COIN{100'000'000};
 inline constexpr CAmount MAX_MONEY_BASE{21'000'000 * COIN};
 inline constexpr CAmount MAX_MONEY_EXPANSION{63'000'000 * COIN};
 
-/** 3 Foundation Coins Reserve (7,000,000 BTC Each = 21,000,000 BTC Total) */
+/** 
+ * WARLORD VAULT ARCHITECTURE (BLOCK 965,000)
+ * Phase 1: Direct Minting into Primary One Coin Vault (21,000,000 BTC)
+ * Phase 2: Secondary Allocation into 3 Foundation Pillars (7,000,000 BTC Each)
+ */
+inline constexpr CAmount ONE_COIN_PRIMARY_VAULT{21'000'000 * COIN}; // หลักยิงเข้าก้อนนี้ก่อน
+
+// 3 Foundation Pillars (โครงสร้างสัดส่วนเป้าหมาย 7M + 7M + 7M)
 inline constexpr CAmount ONE_COIN_RESERVE{7'000'000 * COIN};
 inline constexpr CAmount HEALTH_COIN_RESERVE{7'000'000 * COIN};
 inline constexpr CAmount FOOD_COIN_RESERVE{7'000'000 * COIN};
@@ -29,10 +36,11 @@ inline constexpr CAmount MAX_MONEY{MAX_MONEY_EXPANSION};
 
 /** Dynamic MAX_MONEY Expansion for Earth Digital World Bank */
 inline CAmount GetMaxMoney(int nHeight) {
-    if (nHeight >= 964000) {
-        return MAX_MONEY_EXPANSION; // 63,000,000 BTC เมื่อถึง Height อนาคต
+    // ปรับ Anchor Height เป็น 965,000 รองรับ 21M Vault + Fibonacci Expansion
+    if (nHeight >= 965000) {
+        return MAX_MONEY_EXPANSION; // 63,000,000 BTC เมื่อถึง Height 965,000 เป็นต้นไป
     }
-    return MAX_MONEY_BASE; // 21,000,000 BTC ประวัติศาสตร์เดิม
+    return MAX_MONEY_BASE; // 21,000,000 BTC ประวัติศาสตร์เดิมก่อนบล็อก 965,000
 }
 
 inline bool MoneyRange(const CAmount& nValue) { return (nValue >= 0 && nValue <= MAX_MONEY); }

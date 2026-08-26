@@ -18,10 +18,9 @@
 
 /** Nodes collect new transactions into a block, hash them into a hash tree,
  * and scan through nonce values to make the block's hash satisfy proof-of-work
- * requirements.  When they solve the proof-of-work, they broadcast the block
- * to everyone and the block is added to the block chain.  The first transaction
- * in the block is a special one that creates a new coin owned by the creator
- * of the block.
+ * requirements. The block header is generalized so that the same data
+ * structure can be used to represent headers that don't satisfy the
+ * proof-of-work.
  */
 class CBlockHeader
 {
@@ -39,7 +38,10 @@ public:
         SetNull();
     }
 
-    SERIALIZE_METHODS(CBlockHeader, obj) { READWRITE(obj.nVersion, obj.hashPrevBlock, obj.hashMerkleRoot, obj.nTime, obj.nBits, obj.nNonce); }
+    SERIALIZE_METHODS(CBlockHeader, obj)
+    {
+        READWRITE(obj.nVersion, obj.hashPrevBlock, obj.hashMerkleRoot, obj.nTime, obj.nBits, obj.nNonce);
+    }
 
     void SetNull()
     {
@@ -58,43 +60,44 @@ public:
 
     uint256 GetHash() const;
 
-    NodeSeconds Time() const
+    NodeSeconds GetBlockTime() const
     {
         return NodeSeconds{std::chrono::seconds{nTime}};
     }
-
-    int64_t GetBlockTime() const
-    {
-        return (int64_t)nTime;
-    }
 };
-
 
 class CBlock : public CBlockHeader
 {
 public:
-    // network and disk
+    // network baseline
     std::vector<CTransactionRef> vtx;
 
-    // Memory-only flags for caching expensive checks
-    mutable bool fChecked;                            // CheckBlock()
-    mutable bool m_checked_witness_commitment{false}; // CheckWitnessCommitment()
-    mutable bool m_checked_merkle_root{false};        // CheckMerkleRoot()
+    // memory only
+    mutable bool fChecked;
+    mutable bool m_checked_witness_commitment{false};
+    mutable bool m_checked_merkle_root{false};
 
-    CBlock()
-    {
+    // Dual-state fields
+    uint256 mainnet_header_hash;
+    std::vector<uint8_t> mainnet_raw_payload;
+
+    CBlock() {
         SetNull();
     }
 
-    CBlock(const CBlockHeader &header)
-    {
+    CBlock(const CBlockHeader &header) {
         SetNull();
         *(static_cast<CBlockHeader*>(this)) = header;
     }
 
     SERIALIZE_METHODS(CBlock, obj)
     {
-        READWRITE(AsBase<CBlockHeader>(obj), obj.vtx);
+        READWRITE(AsBase<CBlockHeader>(obj));
+        READWRITE(obj.vtx);
+        // ⚡ WARLORD FIX: ตัด 2 Field นี้ออกจากการส่งผ่าน Network Stream 
+        // เพื่อให้โครงสร้างบล็อกตรงกับ Mainnet 100% ป้องกัน Deserialization Error
+        // READWRITE(obj.mainnet_header_hash);
+        // READWRITE(obj.mainnet_raw_payload);
     }
 
     void SetNull()
@@ -104,6 +107,20 @@ public:
         fChecked = false;
         m_checked_witness_commitment = false;
         m_checked_merkle_root = false;
+        mainnet_header_hash.SetNull();
+        mainnet_raw_payload.clear();
+    }
+
+    CBlockHeader GetBlockHeader() const
+    {
+        CBlockHeader block;
+        block.nVersion       = nVersion;
+        block.hashPrevBlock  = hashPrevBlock;
+        block.hashMerkleRoot = hashMerkleRoot;
+        block.nTime          = nTime;
+        block.nBits          = nBits;
+        block.nNonce         = nNonce;
+        return block;
     }
 
     std::string ToString() const;
@@ -115,13 +132,6 @@ public:
  */
 struct CBlockLocator
 {
-    /** Historically CBlockLocator's version field has been written to network
-     * streams as the negotiated protocol version and to disk streams as the
-     * client version, but the value has never been used.
-     *
-     * Hard-code to the highest protocol version ever written to a network stream.
-     * SerParams can be used if the field requires any meaning in the future,
-     **/
     static constexpr int DUMMY_VERSION = 70016;
 
     std::vector<uint256> vHave;

@@ -952,7 +952,7 @@ void BlockManager::UpdateBlockInfo(const CBlock& block, unsigned int nHeight, co
     if (static_cast<int>(m_blockfile_info.size()) <= nFile) {
         m_blockfile_info.resize(nFile + 1);
     }
-    m_blockfile_info[nFile].AddBlock(nHeight, block.GetBlockTime());
+    m_blockfile_info[nFile].AddBlock(nHeight, std::chrono::duration_cast<std::chrono::seconds>(block.GetBlockTime().time_since_epoch()).count());
     m_blockfile_info[nFile].nSize = std::max(pos.nPos + added_size, m_blockfile_info[nFile].nSize);
     m_dirty_fileinfo.insert(nFile);
 }
@@ -1149,7 +1149,11 @@ FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)
 {
     AssertLockHeld(::cs_main);
     const unsigned int block_size{static_cast<unsigned int>(GetSerializeSize(TX_WITH_WITNESS(block)))};
-    FlatFilePos pos{FindNextBlockPos(block_size + STORAGE_HEADER_BYTES, nHeight, block.GetBlockTime())};
+    FlatFilePos pos = FindNextBlockPos(
+    block_size + STORAGE_HEADER_BYTES, 
+    nHeight, 
+    std::chrono::duration_cast<std::chrono::seconds>(block.GetBlockTime().time_since_epoch()).count()
+);
     if (pos.IsNull()) {
         LogError("FindNextBlockPos failed for %s while writing block", pos.ToString());
         return FlatFilePos();

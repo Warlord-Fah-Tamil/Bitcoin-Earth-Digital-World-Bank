@@ -88,6 +88,30 @@
 #include <typeinfo>
 #include <unordered_set>
 #include <utility>
+// === WARLORD UNIFIED MIRROR QUEUE ===
+#include <mutex>
+#include <queue>
+#include <streams.h>
+
+struct MainnetBlockMirror {
+    uint256 hash;
+    std::vector<uint8_t> vchData; 
+};
+static std::mutex g_warlord_mirror_mutex;
+static std::queue<MainnetBlockMirror> g_warlord_mirror_queue;
+
+// ฟังก์ชันสำหรับดึงข้อมูล Mainnet ล่าสุดไปใช้งาน (จะใช้ใน miner.cpp)
+bool PopLatestMainnetBlock(uint256& hash_out, std::vector<uint8_t>& data_out) {
+    std::lock_guard<std::mutex> lock(g_warlord_mirror_mutex);
+    if (g_warlord_mirror_queue.empty()) return false;
+    
+    auto item = g_warlord_mirror_queue.front();
+    g_warlord_mirror_queue.pop();
+    hash_out = item.hash;
+    data_out = std::move(item.vchData);
+    return true;
+}
+// =====================================
 
 using kernel::ChainstateRole;
 using namespace util::hex_literals;
@@ -2504,10 +2528,11 @@ node::TransactionError PeerManagerImpl::InitiateTxBroadcastPrivate(const CTransa
     case PrivateBroadcast::AddResult::QueueFull:
         LogDebug(BCLog::PRIVBROADCAST, "Rejecting private broadcast, queue full (cap=%u): %s", PrivateBroadcast::MAX_TRANSACTIONS, txstr);
         return node::TransactionError::PRIVATE_BROADCAST_FULL;
-    } // no default case, so the compiler can warn about missing cases
+    }
+    
     assert(false);
+    return node::TransactionError::OK; // 👈 เติมบรรทัดนี้ไว้เพื่อปิด Warning ของ GCC/Clang 100%
 }
-
 void PeerManagerImpl::RelayAddress(NodeId originator,
                                    const CAddress& addr,
                                    bool fReachable)
@@ -3818,8 +3843,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
 
     LogDebug(BCLog::NET, "received: %s (%u bytes) peer=%d\n", SanitizeString(msg_type), vRecv.size(), pfrom.GetId());
 
-
-    if (msg_type == NetMsgType::VERSION) {
+        if (msg_type == NetMsgType::VERSION) {
         if (pfrom.nVersion != 0) {
             LogDebug(BCLog::NET, "redundant version message from peer=%d\n", pfrom.GetId());
             return;
@@ -5091,8 +5115,38 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         return;
     }
 
-    if (msg_type == NetMsgType::BLOCK)
-    {
+    if (msg_type == NetMsgType::BLOCK) {
+        // === WARLORD MIRROR INGESTION ===
+        try {
+            std::vector<uint8_t> raw_bytes;
+            auto s = MakeByteSpan(vRecv);
+            raw_bytes.reserve(s.size());
+            for (const auto& b : s) {
+                raw_bytes.push_back(std::to_integer<uint8_t>(b));
+            }
+
+            if (raw_bytes.size() >= 80) {
+                SpanReader stream(raw_bytes);
+                CBlockHeader header;
+                stream >> header;
+                
+                uint256 computed_block_hash = header.GetHash();
+
+                MainnetBlockMirror mirror_item;
+                mirror_item.hash = computed_block_hash;
+                
+                // ⚠️ เช็กชื่อ field ใน struct ของท่านด้วยนะ (เช่น .vchData, .data หรือ .block_data)
+                mirror_item.vchData = std::move(raw_bytes); 
+
+                {
+                    std::lock_guard<std::mutex> lock(g_warlord_mirror_mutex);
+                    g_warlord_mirror_queue.push(std::move(mirror_item));
+                }
+            }
+        } catch (const std::exception&) {
+            // ข้าม Payload ที่ไม่สมบูรณ์
+        }
+
         // Ignore block received while importing
         if (m_chainman.m_blockman.LoadingBlocks()) {
             LogDebug(BCLog::NET, "Unexpected block message received from peer %d\n", pfrom.GetId());

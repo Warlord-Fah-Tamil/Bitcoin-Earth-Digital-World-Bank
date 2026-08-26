@@ -113,23 +113,21 @@ public:
         consensus.signet_challenge.clear();
         // ... (โค้ดตั้งค่า Consensus เดิมของ Mainnet) ...
 
-        // ====================================================================
+	// ====================================================================
         // --- Warlord Phase 1: Deployment Parameters (Bit 29) ---
         // ====================================================================
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 29;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = 0; // เปิดใช้งานสัญญาณทันที
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 964000; // เป้าหมายเปิดกติกาจริงที่บล็อก 964,000
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 965000; // เปลี่ยนเป้าหมายเป็นบล็อก 965,000
         // ====================================================================
-	consensus.nSubsidyHalvingInterval = 210000;
+        consensus.nSubsidyHalvingInterval = 210000;
         // ========================================================
-	// [WARLORD ANCHOR POINT] 
-	// ========================================================
-	consensus.WarlordAnchorHeight = 964000;
-	consensus.nPowTargetSpacing = 1;
-	consensus.fPowAllowMinDifficultyBlocks = true;
-	consensus.fPowNoRetargeting = false;
-	consensus.script_flag_exceptions.emplace( // BIP16 exception
+        // [WARLORD ANCHOR POINT] 
+        // ========================================================
+        consensus.WarlordAnchorHeight = 965000; // เปลี่ยน Anchor Point เป็น 965,000
+        
+        consensus.script_flag_exceptions.emplace( // BIP16 exception
             uint256{"00000000000002dc756eebf4f49723ed8d30cc28a5f108eb94b1ba88ac4f9c22"}, SCRIPT_VERIFY_NONE);
         consensus.script_flag_exceptions.emplace( // Taproot exception
             uint256{"0000000000000000000f14c35b2d841e986ab5441de8c585d5ffe55ea1e395ad"}, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS);
@@ -142,18 +140,17 @@ public:
         consensus.MinBIP9WarningHeight = 711648; // taproot activation height + miner confirmation window
         consensus.powLimit = uint256{"00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
+        
+        // ⚡ ค่าพารามิเตอร์ของ Mainnet หลัก (ย้ายมาไว้รวมกัน ป้องกันการเขียนทับ)
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.enforce_BIP94 = false;
         consensus.fPowNoRetargeting = false;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::NEVER_ACTIVE;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 0; // No activation delay
+        
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].threshold = 1815; // 90%
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].period = 2016;
 
-        ApplyDeploymentOptions(opts.dep_opts);
+        ApplyDeploymentOptions(opts.dep_opts);;
 
         consensus.nMinimumChainWork = uint256{"0000000000000000000000000000000000000001128750f82f4c366153a3a030"};
         consensus.defaultAssumeValid = uint256{"00000000000000000000ccebd6d74d9194d8dcdc1d177c478e094bfad51ba5ac"}; // 938343

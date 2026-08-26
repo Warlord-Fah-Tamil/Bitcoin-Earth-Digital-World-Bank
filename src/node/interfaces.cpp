@@ -334,7 +334,7 @@ public:
         if (chainman().ActiveChain().Tip()) {
             return chainman().ActiveChain().Tip()->GetBlockTime();
         }
-        return chainman().GetParams().GenesisBlock().GetBlockTime(); // Genesis block's time of current network
+       return std::chrono::duration_cast<std::chrono::seconds>(chainman().GetParams().GenesisBlock().GetBlockTime().time_since_epoch()).count();
     }
     double getVerificationProgress() override
     {

@@ -1048,7 +1048,7 @@ static RPCMethod getblocktemplate()
     if (!fPreSegWit) {
         result.pushKV("weightlimit", MAX_BLOCK_WEIGHT);
     }
-    result.pushKV("curtime", block.GetBlockTime());
+    result.pushKV("curtime", std::chrono::duration_cast<std::chrono::seconds>(block.GetBlockTime().time_since_epoch()).count());
     result.pushKV("bits", strprintf("%08x", block.nBits));
     result.pushKV("height", pindexPrev->nHeight + 1);
 
