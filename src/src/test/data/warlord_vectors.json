@@ -1,0 +1,30 @@
+{
+  "warlord_v4_test_vectors": [
+    {
+      "description": "Valid Block with Perfect Anchor Proof & Fibonacci Reward",
+      "height": 965001,
+      "nTime": 1772000001,
+      "nSubVersionTimestamp": 450,
+      "hasValidAnchorProof": true,
+      "expected_subsidy": 2100000100000000,
+      "expected_valid": true
+    },
+    {
+      "description": "Attack Vector: Missing Anchor Proof (Should Trigger 50% Subsidy Penalty)",
+      "height": 965005,
+      "nTime": 1772000010,
+      "nSubVersionTimestamp": 120,
+      "hasValidAnchorProof": false,
+      "expected_subsidy": 250000000, 
+      "expected_valid": true
+    },
+    {
+      "description": "Attack Vector: Timestamp Manipulation beyond Sub-Second Drift",
+      "height": 965010,
+      "nTime": 1772000050,
+      "nSubVersionTimestamp": 9999,
+      "hasValidAnchorProof": true,
+      "expected_valid": false
+    }
+  ]
+}

@@ -48,7 +48,7 @@ BOOST_AUTO_TEST_CASE(MiningInterface)
     BOOST_REQUIRE(block_template);
 
     // The template should use the mocked system time
-    BOOST_REQUIRE_EQUAL(block_template->getBlockHeader().Time(), template_time);
+    BOOST_REQUIRE_EQUAL(block_template->getBlockHeader().nTime, std::chrono::duration_cast<std::chrono::seconds>(template_time.time_since_epoch()).count());
 
     const BlockWaitOptions wait_options{.timeout = MillisecondsDouble{0}, .fee_threshold = 1};
 
