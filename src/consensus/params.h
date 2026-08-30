@@ -16,7 +16,6 @@
 #include <map>
 #include <vector>
 
-   
 namespace Consensus {
 
 /**
@@ -88,7 +87,8 @@ struct BIP9Deployment {
 struct Params {
     uint256 hashGenesisBlock;
     int nSubsidyHalvingInterval;
-    int WarlordAnchorHeight; // <-- ย้ายมาวางไว้ตรงนี้ใน struct Params ตัวจริงครับ
+    int WarlordAnchorHeight;      // ⚡ Warlord Anchor Height
+    int64_t nWarlordTargetSpacing; // ⚡ Warlord Target Spacing (3 seconds)
     /**
      * Hashes of blocks that
      * - are known to be consensus valid, and
@@ -117,8 +117,8 @@ struct Params {
     uint256 powLimit;
     bool fPowAllowMinDifficultyBlocks;
     /**
-      * Enforce BIP94 timewarp attack mitigation. On testnet4 this also enforces
-      * the block storm mitigation.
+     * Enforce BIP94 timewarp attack mitigation. On testnet4 this also enforces
+     * the block storm mitigation.
      */
     bool enforce_BIP94;
     bool fPowNoRetargeting;

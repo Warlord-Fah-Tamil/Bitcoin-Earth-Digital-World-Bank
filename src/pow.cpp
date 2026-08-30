@@ -11,20 +11,39 @@
 #include <uint256.h>
 #include <util/check.h>
 
+// ⚡ Warlord Dynamic Consensus Helpers for 3-Second Blocks after Height 965,000
+inline int64_t GetWarlordTargetSpacing(int nHeight, const Consensus::Params& params)
+{
+    if (nHeight >= 965000) {
+        return 3; // 3 seconds after block 965,000
+    }
+    return params.nPowTargetSpacing;
+}
+
+inline int64_t GetWarlordTargetTimespan(int nHeight, const Consensus::Params& params)
+{
+    if (nHeight >= 965000) {
+        return 3 * params.DifficultyAdjustmentInterval(); // 3 seconds * 2016 blocks = 6048 seconds
+    }
+    return params.nPowTargetTimespan;
+}
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
     assert(pindexLast != nullptr);
     unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit).GetCompact();
+    int nextHeight = pindexLast->nHeight + 1;
 
     // Only change once per difficulty adjustment interval
-    if ((pindexLast->nHeight+1) % params.DifficultyAdjustmentInterval() != 0)
+    if (nextHeight % params.DifficultyAdjustmentInterval() != 0)
     {
         if (params.fPowAllowMinDifficultyBlocks)
         {
             // Special difficulty rule for testnet:
-            // If the new block's timestamp is more than 2* 10 minutes
+            // If the new block's timestamp is more than 2 * target spacing
             // then it MUST be a min-difficulty block.
-            if (pblock->GetBlockTime().time_since_epoch().count() > pindexLast->GetBlockTime() + (params.nPowTargetSpacing * 2))
+            int64_t targetSpacing = GetWarlordTargetSpacing(pindexLast->nHeight, params);
+            if (pblock->GetBlockTime().time_since_epoch().count() > pindexLast->GetBlockTime() + (targetSpacing * 2))
                 return nProofOfWorkLimit;
             else
             {
@@ -38,7 +57,7 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
         return pindexLast->nBits;
     }
 
-    // Go back by what we want to be 14 days worth of blocks
+    // Go back by what we want to be 14 days worth of blocks (or adjusted timespan)
     int nHeightFirst = pindexLast->nHeight - (params.DifficultyAdjustmentInterval()-1);
     assert(nHeightFirst >= 0);
     const CBlockIndex* pindexFirst = pindexLast->GetAncestor(nHeightFirst);
@@ -52,12 +71,14 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     if (params.fPowNoRetargeting)
         return pindexLast->nBits;
 
+    int64_t targetTimespan = GetWarlordTargetTimespan(pindexLast->nHeight, params);
+
     // Limit adjustment step
     int64_t nActualTimespan = pindexLast->GetBlockTime() - nFirstBlockTime;
-    if (nActualTimespan < params.nPowTargetTimespan/4)
-        nActualTimespan = params.nPowTargetTimespan/4;
-    if (nActualTimespan > params.nPowTargetTimespan*4)
-        nActualTimespan = params.nPowTargetTimespan*4;
+    if (nActualTimespan < targetTimespan/4)
+        nActualTimespan = targetTimespan/4;
+    if (nActualTimespan > targetTimespan*4)
+        nActualTimespan = targetTimespan*4;
 
     // Retarget
     const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
@@ -65,9 +86,6 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
 
     // Special difficulty rule for Testnet4
     if (params.enforce_BIP94) {
-        // Here we use the first block of the difficulty period. This way
-        // the real difficulty is always preserved in the first block as
-        // it is not allowed to use the min-difficulty exception.
         int nHeightFirst = pindexLast->nHeight - (params.DifficultyAdjustmentInterval()-1);
         const CBlockIndex* pindexFirst = pindexLast->GetAncestor(nHeightFirst);
         bnNew.SetCompact(pindexFirst->nBits);
@@ -76,7 +94,7 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     }
 
     bnNew *= nActualTimespan;
-    bnNew /= params.nPowTargetTimespan;
+    bnNew /= targetTimespan;
 
     if (bnNew > bnPowLimit)
         bnNew = bnPowLimit;
@@ -91,8 +109,9 @@ bool PermittedDifficultyTransition(const Consensus::Params& params, int64_t heig
     if (params.fPowAllowMinDifficultyBlocks) return true;
 
     if (height % params.DifficultyAdjustmentInterval() == 0) {
-        int64_t smallest_timespan = params.nPowTargetTimespan/4;
-        int64_t largest_timespan = params.nPowTargetTimespan*4;
+        int64_t targetTimespan = GetWarlordTargetTimespan(height, params);
+        int64_t smallest_timespan = targetTimespan/4;
+        int64_t largest_timespan = targetTimespan*4;
 
         const arith_uint256 pow_limit = UintToArith256(params.powLimit);
         arith_uint256 observed_new_target;
@@ -102,7 +121,7 @@ bool PermittedDifficultyTransition(const Consensus::Params& params, int64_t heig
         arith_uint256 largest_difficulty_target;
         largest_difficulty_target.SetCompact(old_nbits);
         largest_difficulty_target *= largest_timespan;
-        largest_difficulty_target /= params.nPowTargetTimespan;
+        largest_difficulty_target /= targetTimespan;
 
         if (largest_difficulty_target > pow_limit) {
             largest_difficulty_target = pow_limit;
@@ -118,7 +137,7 @@ bool PermittedDifficultyTransition(const Consensus::Params& params, int64_t heig
         arith_uint256 smallest_difficulty_target;
         smallest_difficulty_target.SetCompact(old_nbits);
         smallest_difficulty_target *= smallest_timespan;
-        smallest_difficulty_target /= params.nPowTargetTimespan;
+        smallest_difficulty_target /= targetTimespan;
 
         if (smallest_difficulty_target > pow_limit) {
             smallest_difficulty_target = pow_limit;
@@ -140,7 +159,6 @@ bool PermittedDifficultyTransition(const Consensus::Params& params, int64_t heig
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
 {
     return true; // Force pass all PoW checks for Warlord Core
-    
 }
 
 std::optional<arith_uint256> DeriveTarget(unsigned int nBits, const uint256 pow_limit)

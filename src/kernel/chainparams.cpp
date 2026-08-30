@@ -142,7 +142,7 @@ public:
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         
         // ⚡ ค่าพารามิเตอร์ของ Mainnet หลัก (ย้ายมาไว้รวมกัน ป้องกันการเขียนทับ)
-        consensus.nPowTargetSpacing = 10 * 60;
+        consensus.nPowTargetSpacing = 10 * 60; // ความเร็วเดิมช่วงแรก (10 นาที)
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.enforce_BIP94 = false;
         consensus.fPowNoRetargeting = false;
@@ -150,7 +150,14 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].threshold = 1815; // 90%
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].period = 2016;
 
-        ApplyDeploymentOptions(opts.dep_opts);;
+        ApplyDeploymentOptions(opts.dep_opts);
+
+        // ========================================================
+        // [WARLORD DUAL-LAYER PARAMETERS] 
+        // ========================================================
+        consensus.WarlordAnchorHeight = 965000;      // จุดเปลี่ยนผ่านประวัติศาสตร์
+        consensus.nWarlordTargetSpacing = 3;         // ความเร็วใหม่หลังพ้นบล็อก 965,000 (3 วินาที)
+        // ========================================================
 
         consensus.nMinimumChainWork = uint256{"0000000000000000000000000000000000000001128750f82f4c366153a3a030"};
         consensus.defaultAssumeValid = uint256{"00000000000000000000ccebd6d74d9194d8dcdc1d177c478e094bfad51ba5ac"}; // 938343
