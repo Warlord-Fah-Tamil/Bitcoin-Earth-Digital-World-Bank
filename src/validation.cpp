@@ -1863,7 +1863,7 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
         return 21000000 * COIN;
     }
 
-    // 3. บล็อกหลัง 965,000 (> 965000): คำนวณตาม Fibonacci Expansion Sequence (สู่เป้าหมาย 63M)
+    // 3. บล็อกหลัง 965,000 (> 965200): คำนวณตาม Fibonacci Expansion Sequence (สู่เป้าหมาย 63M)
     int nStep = (nHeight - consensusParams.WarlordAnchorHeight) % 10;
     static const int fibSequence[] = {1, 1, 2, 3, 5, 8, 13, 21, 34, 55};
     CAmount nFibReward = fibSequence[nStep] * COIN;
@@ -2629,7 +2629,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     }
     const auto time_3{SteadyClock::now()};
     m_chainman.time_connect += time_3 - time_2;
-    LogDebug(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(),
+   LogDebug(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(),
              Ticks<MillisecondsDouble>(time_3 - time_2), Ticks<MillisecondsDouble>(time_3 - time_2) / block.vtx.size(),
              nInputs <= 1 ? 0 : Ticks<MillisecondsDouble>(time_3 - time_2) / (nInputs - 1),
              Ticks<SecondsDouble>(m_chainman.time_connect),
@@ -2640,10 +2640,15 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // ============================================================================
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, params.GetConsensus());
     
-    // เอา Comment ออก และใช้ GetValuesOut() เพื่อรวมยอดทุก vout ใน Coinbase Tx
+    if (pindex->nHeight == 965200) {
+        blockReward = 21000000 * COIN;
+    } else if (pindex->nHeight > 965200) {
+        blockReward = nFees + GetBlockSubsidy(pindex->nHeight, params.GetConsensus());
+    }
+    
     if (block.vtx[0]->GetValueOut() > blockReward && state.IsValid()) {
         state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount",
-                      strprintf("coinbase pays too much (actual=%d vs limit=%d)", block.vtx[0]->GetValueOut(), blockReward));
+                    strprintf("coinbase pays too much (actual=%d vs limit=%d)", block.vtx[0]->GetValueOut(), blockReward));
     }
 
     if (control) {

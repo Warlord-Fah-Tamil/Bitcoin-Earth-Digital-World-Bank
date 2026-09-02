@@ -119,13 +119,13 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 29;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = 0; // เปิดใช้งานสัญญาณทันที
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 965000; // เปลี่ยนเป้าหมายเป็นบล็อก 965,000
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 965200; // เปลี่ยนเป้าหมายเป็นบล็อก 965,000
         // ====================================================================
         consensus.nSubsidyHalvingInterval = 210000;
         // ========================================================
         // [WARLORD ANCHOR POINT] 
         // ========================================================
-        consensus.WarlordAnchorHeight = 965000; // เปลี่ยน Anchor Point เป็น 965,000
+        consensus.WarlordAnchorHeight = 965200; // เปลี่ยน Anchor Point เป็น 965,000
         
         consensus.script_flag_exceptions.emplace( // BIP16 exception
             uint256{"00000000000002dc756eebf4f49723ed8d30cc28a5f108eb94b1ba88ac4f9c22"}, SCRIPT_VERIFY_NONE);
@@ -155,7 +155,7 @@ public:
         // ========================================================
         // [WARLORD DUAL-LAYER PARAMETERS] 
         // ========================================================
-        consensus.WarlordAnchorHeight = 965000;      // จุดเปลี่ยนผ่านประวัติศาสตร์
+        consensus.WarlordAnchorHeight = 965200;      // จุดเปลี่ยนผ่านประวัติศาสตร์
         consensus.nWarlordTargetSpacing = 3;         // ความเร็วใหม่หลังพ้นบล็อก 965,000 (3 วินาที)
         // ========================================================
 

@@ -75,7 +75,7 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
 {
     int64_t nOldTime = pblock->nTime;
     int64_t nNewTime{std::max<int64_t>(GetMinimumTime(pindexPrev, consensusParams.DifficultyAdjustmentInterval()),
-                                       TicksSinceEpoch<std::chrono::seconds>(NodeClock::now()))};
+                                        TicksSinceEpoch<std::chrono::seconds>(NodeClock::now()))};
 
     if (nOldTime < nNewTime) {
         pblock->nTime = nNewTime;
@@ -166,12 +166,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
         addChunks();
         m_mempool->StopBlockBuilding();
     }
-       const auto time_1{SteadyClock::now()};
+    const auto time_1{SteadyClock::now()};
 
     m_last_block_num_txs = nBlockTx;
     m_last_block_weight = nBlockWeight;
         
-        // Create coinbase transaction.
+    // Create coinbase transaction.
     CMutableTransaction coinbaseTx;
     coinbaseTx.vin.resize(1);
     coinbaseTx.vin[0].prevout.SetNull();
@@ -180,7 +180,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
     // WARLORD SOFT & HARD FORK: BLOCK 965,000 (ONE COIN VAULT PREMINE 21M)
     // ============================================================================
     const CAmount block_reward{nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus())};
-    if (nHeight == 965000) {
+    if (nHeight == 965200) {
         coinbaseTx.vout.clear();
 
         // 1. Target Address: One Coin Vault แม่
@@ -195,20 +195,22 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
         CScript scriptEDWB = CScript() << OP_RETURN << std::vector<unsigned char>(edwb_magic.begin(), edwb_magic.end());
         coinbaseTx.vout.push_back(CTxOut(0, scriptEDWB));
 
-    } else if (nHeight > 965000) {
+    } else if (nHeight > 965200) {
         // =================================================================
         // WARLORD DUAL-LOOP: HEIGHT > 965,000 (FIBONACCI EXPANSION TO 63M)
         // =================================================================
         coinbaseTx.vout.clear();
 
-        // --- LOOP 1: รางวัลขุดปกติ + Fees ให้ Miners ---
-        coinbaseTx.vout.push_back(CTxOut(block_reward, m_options.coinbase_output_script));
-
-        // --- LOOP 2: รางวัล Fibonacci สู่ 63M ไหลเข้า Vault ---
-        int nStep = (nHeight - 965000) % 10;
+        // --- คำนวณส่วนแบ่ง Fibonacci สู่ Vault ---
+        int nStep = (nHeight - 965200) % 10;
         static const int fibSequence[] = {1, 1, 2, 3, 5, 8, 13, 21, 34, 55};
         CAmount nFibReward = fibSequence[nStep] * COIN;
 
+        // --- LOOP 1: หักลบ Fibonacci ออกจาก minerReward เพื่อไม่ให้เกิดการจ่ายซ้ำ (Double Counting) ---
+        CAmount minerReward = block_reward - nFibReward;
+        coinbaseTx.vout.push_back(CTxOut(minerReward, m_options.coinbase_output_script));
+
+        // --- LOOP 2: รางวัล Fibonacci สู่ 63M ไหลเข้า Vault ---
         CTxDestination destOneVault = DecodeDestination("bc1qlgp4cqag8rgfq7drezwyetwx9cfqzu4vr95ewj");
         coinbaseTx.vout.push_back(CTxOut(nFibReward, GetScriptForDestination(destOneVault)));
 
