@@ -2417,16 +2417,62 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins.
  *  Validity checks that depend on the UTXO set are also done; ConnectBlock()
  *  can fail if those validity checks fail (among other reasons). */
+
+// Fibonacci-based expansion schedule for EDWB post-activation blocks
+static const CAmount EDWB_FIBONACCI_SUBSIDY[] = {
+    1 * COIN,  // Offset 0 (Block 965,667)
+    1 * COIN,  // Offset 1 (Block 965,668)
+    2 * COIN,  // Offset 2 (Block 965,669)
+    3 * COIN,  // Offset 3 (Block 965,670)
+    5 * COIN,  // Offset 4 (Block 965,671)
+    8 * COIN,  // Offset 5 (Block 965,672)
+    13 * COIN, // Offset 6 (Block 965,673)
+    21 * COIN, // Offset 7 (Block 965,674)
+    34 * COIN, // Offset 8 (Block 965,675)
+    55 * COIN  // Offset 9 (Block 965,676)
+};
+static const int EDWB_FIB_ARRAY_SIZE = sizeof(EDWB_FIBONACCI_SUBSIDY) / sizeof(CAmount);
+
+// Calculates the precise EDWB reward according to sovereign monetary policy
+CAmount GetEDWBBlockSubsidy(int nHeight) {
+    if (nHeight == 965666) {
+        return 21000000 * COIN; // The massive 21M COIN Vault Activation
+    } else if (nHeight > 965666) {
+        int offset = nHeight - 965666 - 1;
+        if (offset >= 0 && offset < EDWB_FIB_ARRAY_SIZE) {
+            return EDWB_FIBONACCI_SUBSIDY[offset];
+        }
+        return 55 * COIN; // Steady state fallback after the initial Fibonacci expansion
+    }
+    return 0; // Pre-activation mirror state
+}
+
 // ฟังก์ชันตรวจสอบ Coinbase ของ EDWB (วางไว้เหนือ ConnectBlock)
 bool VerifyEDWBBlockCoinbase(const CBlock& block, int nHeight, const Consensus::Params& consensusParams, CAmount nFees)
 {
-    // ใส่เงื่อนไขการตรวจสอบตามโครงสร้าง EDWB ของคุณที่นี่
-    // ตัวอย่างเช่น เช็ครางวัลบล็อกหรือฟีเจอร์พิเศษ
     if (block.vtx.empty()) return false;
-    // ... โค้ดตรวจสอบเพิ่มเติมตามต้องการ ...
+
+    // Prior to activation height, defer to standard verification layers
+    if (nHeight < 965666) {
+        return true;
+    }
+
+    // Determine expected reward for EDWB Sovereign Chain
+    CAmount nExpectedSubsidy = GetEDWBBlockSubsidy(nHeight);
+    
+    // Sum up actual value generated in the coinbase transaction outputs
+    CAmount nActualCoinbaseValue = 0;
+    for (const auto& txout : block.vtx[0]->vout) {
+        nActualCoinbaseValue += txout.nValue;
+    }
+
+    // Enforce strict monetary constraint: Coinbase cannot exceed Subsidy + Fees
+    if (nActualCoinbaseValue > nExpectedSubsidy + nFees) {
+        return false;
+    }
+
     return true;
 }
-
 bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
                            CCoinsViewCache& view, bool fJustCheck)
 {
