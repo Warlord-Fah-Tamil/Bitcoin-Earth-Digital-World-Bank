@@ -6,8 +6,21 @@
 #define BITCOIN_CLIENTVERSION_H
 
 #include <util/macros.h>
-
 #include <bitcoin-build-config.h> // IWYU pragma: keep
+
+// ============================================================================
+// EDWB SOVEREIGN NODE IDENTITY OVERRIDES
+// ============================================================================
+#undef CLIENT_VERSION_MAJOR
+#undef CLIENT_VERSION_MINOR
+#undef CLIENT_VERSION_BUILD
+#undef COPYRIGHT_YEAR
+
+#define CLIENT_VERSION_MAJOR 1
+#define CLIENT_VERSION_MINOR 0
+#define CLIENT_VERSION_BUILD 0
+#define COPYRIGHT_YEAR 2026
+// ============================================================================
 
 // Check that required client information is defined
 #if !defined(CLIENT_VERSION_MAJOR) || !defined(CLIENT_VERSION_MINOR) || !defined(CLIENT_VERSION_BUILD) || !defined(CLIENT_VERSION_IS_RELEASE) || !defined(COPYRIGHT_YEAR)
@@ -24,12 +37,12 @@
 #include <vector>
 
 inline constexpr int CLIENT_VERSION =
-                             10000 * CLIENT_VERSION_MAJOR
-                         +     100 * CLIENT_VERSION_MINOR
-                         +       1 * CLIENT_VERSION_BUILD;
+                            10000 * CLIENT_VERSION_MAJOR
+                          +   100 * CLIENT_VERSION_MINOR
+                          +     1 * CLIENT_VERSION_BUILD;
 
+// Declare UA_NAME as extern to prevent redefinition conflict with clientversion.cpp
 extern const std::string UA_NAME;
-
 
 std::string FormatFullVersion();
 std::string FormatSubVersion(const std::string& name, int nClientVersion, const std::vector<std::string>& comments);

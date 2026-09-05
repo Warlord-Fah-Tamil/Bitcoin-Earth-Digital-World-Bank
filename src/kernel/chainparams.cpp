@@ -113,64 +113,56 @@ public:
         consensus.signet_challenge.clear();
         // ... (โค้ดตั้งค่า Consensus เดิมของ Mainnet) ...
 
-	// ====================================================================
+        // ====================================================================
         // --- Warlord Phase 1: Deployment Parameters (Bit 29) ---
         // ====================================================================
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 29;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = 0; // เปิดใช้งานสัญญาณทันที
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 965200; // เปลี่ยนเป้าหมายเป็นบล็อก 965,000
-        // ====================================================================
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 965666;
+
         consensus.nSubsidyHalvingInterval = 210000;
-        // ========================================================
-        // [WARLORD ANCHOR POINT] 
-        // ========================================================
-        consensus.WarlordAnchorHeight = 965200; // เปลี่ยน Anchor Point เป็น 965,000
-        
+
         consensus.script_flag_exceptions.emplace( // BIP16 exception
             uint256{"00000000000002dc756eebf4f49723ed8d30cc28a5f108eb94b1ba88ac4f9c22"}, SCRIPT_VERIFY_NONE);
         consensus.script_flag_exceptions.emplace( // Taproot exception
             uint256{"0000000000000000000f14c35b2d841e986ab5441de8c585d5ffe55ea1e395ad"}, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS);
         consensus.BIP34Height = 227931;
         consensus.BIP34Hash = uint256{"000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8"};
-        consensus.BIP65Height = 388381; // 000000000000000004c2b624ed5d7756c508d90fd0da2c7c679febfa6c4735f0
-        consensus.BIP66Height = 363725; // 00000000000000000379eaa19dce8c9b722d46ae6a57c2f1a988119488b50931
-        consensus.CSVHeight = 419328; // 000000000000000004a1b34462cb8aeebd5799177f7a29cf28f2d1961716b5b5
-        consensus.SegwitHeight = 481824; // 0000000000000000001c8018d9cb3b742ef25114f27563e3fc4a1902167f9893
-        consensus.MinBIP9WarningHeight = 711648; // taproot activation height + miner confirmation window
+        consensus.BIP65Height = 388381;
+        consensus.BIP66Height = 363725;
+        consensus.CSVHeight = 419328;
+        consensus.SegwitHeight = 481824;
+        consensus.MinBIP9WarningHeight = 711648;
         consensus.powLimit = uint256{"00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
-        
-        // ⚡ ค่าพารามิเตอร์ของ Mainnet หลัก (ย้ายมาไว้รวมกัน ป้องกันการเขียนทับ)
         consensus.nPowTargetSpacing = 10 * 60; // ความเร็วเดิมช่วงแรก (10 นาที)
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.enforce_BIP94 = false;
         consensus.fPowNoRetargeting = false;
-        
-        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].threshold = 1815; // 90%
+
+consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].threshold = 1815; // 90%
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].period = 2016;
 
         ApplyDeploymentOptions(opts.dep_opts);
 
         // ========================================================
-        // [WARLORD DUAL-LAYER PARAMETERS] 
+        // [WARLORD DUAL-LAYER PARAMETERS]
         // ========================================================
-        consensus.WarlordAnchorHeight = 965200;      // จุดเปลี่ยนผ่านประวัติศาสตร์
-        consensus.nWarlordTargetSpacing = 3;         // ความเร็วใหม่หลังพ้นบล็อก 965,000 (3 วินาที)
+        consensus.WarlordAnchorHeight = 965666;
+        consensus.nWarlordTargetSpacing = 3;
         // ========================================================
 
         consensus.nMinimumChainWork = uint256{"0000000000000000000000000000000000000001128750f82f4c366153a3a030"};
-        consensus.defaultAssumeValid = uint256{"00000000000000000000ccebd6d74d9194d8dcdc1d177c478e094bfad51ba5ac"}; // 938343
+        consensus.defaultAssumeValid = uint256{"00000000000000000000ccebd6d74d9194d8dcdc1d177c478e094bfad51ba5ac"}; 
 
-        /**
-         * The message start string is designed to be unlikely to occur in normal data.
-         * The characters are rarely used upper ASCII, not valid as UTF-8, and produce
-         * a large 32-bit integer with any alignment.
-         */
+        // ========================================================
+        // EDWB SOVEREIGN NETWORK IDENTIFIERS
+        // ========================================================
         pchMessageStart[0] = 0xf9;
-        pchMessageStart[1] = 0xbe;
-        pchMessageStart[2] = 0xb4;
-        pchMessageStart[3] = 0xd9;
+	pchMessageStart[1] = 0xbe;
+	pchMessageStart[2] = 0xb4;
+	pchMessageStart[3] = 0xd9;
         nDefaultPort = 8333;
         nPruneAfterHeight = 100000;
         m_assumed_blockchain_size = 856;
@@ -181,22 +173,17 @@ public:
         assert(consensus.hashGenesisBlock == uint256{"000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"});
         assert(genesis.hashMerkleRoot == uint256{"4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"});
 
-        // Note that of those which support the service bits prefix, most only support a subset of
-        // possible options.
-        // This is fine at runtime as we'll fall back to using them as an addrfetch if they don't support the
-        // service bits we want, but we should get them updated to support all service bits wanted by any
-        // release ASAP to avoid it where possible.
-        vSeeds.emplace_back("dnsseed.bluematt.me."); // Matt Corallo, only supports x9
-        vSeeds.emplace_back("seed.bitcoin.jonasschnelli.ch."); // Jonas Schnelli, only supports x1, x5, x9, and xd
-        vSeeds.emplace_back("seed.btc.petertodd.net."); // Peter Todd, only supports x1, x5, x9, and xd
-        vSeeds.emplace_back("seed.bitcoin.sprovoost.nl."); // Sjors Provoost
-        vSeeds.emplace_back("dnsseed.emzy.de."); // Stephan Oeste
-        vSeeds.emplace_back("seed.bitcoin.wiz.biz."); // Jason Maurice
-        vSeeds.emplace_back("seed.mainnet.achownodes.xyz."); // Ava Chow, only supports x1, x5, x9, x49, x809, x849, xd, x400, x404, x408, x448, xc08, xc48, x40c
+        vSeeds.emplace_back("dnsseed.bluematt.me.");
+        vSeeds.emplace_back("seed.bitcoin.jonasschnelli.ch.");
+        vSeeds.emplace_back("seed.btc.petertodd.net.");
+        vSeeds.emplace_back("seed.bitcoin.sprovoost.nl.");
+        vSeeds.emplace_back("dnsseed.emzy.de.");
+        vSeeds.emplace_back("seed.bitcoin.wiz.biz.");
+        vSeeds.emplace_back("seed.mainnet.achownodes.xyz.");
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,0);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,5);
-        base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,128);
+        base58Prefixes[SECRET_KEY]     = std::vector<unsigned char>(1,128);
         base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x88, 0xB2, 0x1E};
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x88, 0xAD, 0xE4};
 
@@ -206,7 +193,6 @@ public:
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
-
         m_assumeutxo_data = {
             {
                 .height = 840'000,

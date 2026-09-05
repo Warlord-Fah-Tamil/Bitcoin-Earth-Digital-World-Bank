@@ -36,11 +36,11 @@ inline constexpr CAmount MAX_MONEY{MAX_MONEY_EXPANSION};
 
 /** Dynamic MAX_MONEY Expansion for Earth Digital World Bank */
 inline CAmount GetMaxMoney(int nHeight) {
-    // ปรับ Anchor Height เป็น 965,000 รองรับ 21M Vault + Fibonacci Expansion
-    if (nHeight >= 965200) {
-        return MAX_MONEY_EXPANSION; // 63,000,000 BTC เมื่อถึง Height 965,000 เป็นต้นไป
+    // ปรับ Anchor Height เป็น 965,666 รองรับ 21M Vault + Fibonacci Expansion
+    if (nHeight >= 965666) {
+        return MAX_MONEY_EXPANSION; // 63,000,000 BTC เมื่อถึง Height 965,500 เป็นต้นไป
     }
-    return MAX_MONEY_BASE; // 21,000,000 BTC ประวัติศาสตร์เดิมก่อนบล็อก 965,000
+    return MAX_MONEY_BASE; // 21,000,000 BTC ประวัติศาสตร์เดิมก่อนบล็อก 965,500
 }
 
 inline bool MoneyRange(const CAmount& nValue) { return (nValue >= 0 && nValue <= MAX_MONEY); }
