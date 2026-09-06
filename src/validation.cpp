@@ -1848,7 +1848,7 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
 // Activation: Block 965,666
 // ============================================================================
 
-static constexpr int EDWB_ACTIVATION_HEIGHT = 965666;
+static constexpr int EDWB_ACTIVATION_HEIGHT = 965800;
 
 // Expansion Phase: exactly 1,500,000 blocks
 static constexpr int EDWB_EXPANSION_LIMIT = 1500000;
@@ -1865,7 +1865,7 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
     // =========================================================================
     // 1. ORIGINAL BITCOIN SUBSIDY
-    //    Blocks 0 - 965665
+    //    Blocks 0 - 965799
     // =========================================================================
 
     if (nHeight < EDWB_ACTIVATION_HEIGHT) {
@@ -1885,7 +1885,7 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 
     // =========================================================================
     // 2. EDWB ACTIVATION BLOCK
-    //    Block 965666 = exactly 21,000,000 COIN
+    //    Block 965800 = exactly 21,000,000 COIN
     // =========================================================================
 
     if (nHeight == EDWB_ACTIVATION_HEIGHT) {
@@ -1896,15 +1896,15 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     // =========================================================================
     // 3. EDWB EXPANSION PHASE
     //
-    //    Blocks 965,667 - 2,465,666
+    //    Blocks 965,801 - 2,465,800
     //
     //    Remaining issuance required for EXACT 63M total:
     //
     //        63,000,000
-    //      - 20,080,206.25  (original Bitcoin issuance up to 965,666)
+    //      - 20,080,625.00  (original Bitcoin issuance up to 965,800)
     //      - 21,000,000.00  (activation block 21M vault)
     //      ----------------
-    //        21,919,793.75 COIN
+    //        21,919,375.00 COIN
     //
     //    Fibonacci pattern:
     //
@@ -1917,12 +1917,12 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     //
     //    Therefore Base component:
     //
-    //        21,919,793.75
+    //        21,919,375.00
     //      - 21,450,000.00
     //      ----------------
-    //           469,793.75 COIN
+    //             469,375.00 COIN
     //
-    //    Base = 31,319,583 sat/block (approx)
+    //    Base = 31,291,666 sat/block (approx)
     //    Plus fractional adjustment for exact satoshi precision.
     //
     //    This makes the entire expansion mathematically exact.
@@ -1943,14 +1943,14 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
         const CAmount nFibReward =
             fibSequence[fibIndex] * COIN;
 
-        // Exact base component for Activation Height 965,666:
-        // 31,319,583 satoshis = 0.31319583 COIN
-        const CAmount nBaseExpansion = 31319583;
+        // Exact base component for Activation Height 965,800:
+        // 31,291,666 satoshis = 0.31291666 COIN
+        const CAmount nBaseExpansion = 31291666;
 
         // Remainder correction distributed deterministically
         // across the expansion blocks to match exact satoshi totals.
         const CAmount nRemainderCorrection =
-            (nStep <= 500000) ? 1 : 0; // Adjusted distribution window for 500k satoshis remainder
+            (nStep <= 1000000) ? 1 : 0; // Adjusted distribution window for 1,000,000 satoshis remainder
 
         return nBaseExpansion +
                nFibReward +
@@ -1961,7 +1961,7 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     // =========================================================================
     // 4. HARD CAP
     //
-    //    After Block 2,465,666:
+    //    After Block 2,465,800:
     //    No further subsidy is created.
     // =========================================================================
 
@@ -2418,55 +2418,46 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
  *  Validity checks that depend on the UTXO set are also done; ConnectBlock()
  *  can fail if those validity checks fail (among other reasons). */
 
-// Fibonacci-based expansion schedule for EDWB post-activation blocks
-static const CAmount EDWB_FIBONACCI_SUBSIDY[] = {
-    1 * COIN,  // Offset 0 (Block 965,667)
-    1 * COIN,  // Offset 1 (Block 965,668)
-    2 * COIN,  // Offset 2 (Block 965,669)
-    3 * COIN,  // Offset 3 (Block 965,670)
-    5 * COIN,  // Offset 4 (Block 965,671)
-    8 * COIN,  // Offset 5 (Block 965,672)
-    13 * COIN, // Offset 6 (Block 965,673)
-    21 * COIN, // Offset 7 (Block 965,674)
-    34 * COIN, // Offset 8 (Block 965,675)
-    55 * COIN  // Offset 9 (Block 965,676)
-};
-static const int EDWB_FIB_ARRAY_SIZE = sizeof(EDWB_FIBONACCI_SUBSIDY) / sizeof(CAmount);
-
-// Calculates the precise EDWB reward according to sovereign monetary policy
-CAmount GetEDWBBlockSubsidy(int nHeight) {
-    if (nHeight == 965666) {
-        return 21000000 * COIN; // The massive 21M COIN Vault Activation
-    } else if (nHeight > 965666) {
-        int offset = nHeight - 965666 - 1;
-        if (offset >= 0 && offset < EDWB_FIB_ARRAY_SIZE) {
-            return EDWB_FIBONACCI_SUBSIDY[offset];
-        }
-        return 55 * COIN; // Steady state fallback after the initial Fibonacci expansion
-    }
-    return 0; // Pre-activation mirror state
-}
-
-// ฟังก์ชันตรวจสอบ Coinbase ของ EDWB (วางไว้เหนือ ConnectBlock)
-bool VerifyEDWBBlockCoinbase(const CBlock& block, int nHeight, const Consensus::Params& consensusParams, CAmount nFees)
+// ฟังก์ชันตรวจสอบ Coinbase และเพดานรางวัลของ EDWB (วางไว้เหนือ ConnectBlock)
+bool VerifyEDWBBlockCoinbase(
+    const CBlock& block,
+    int nHeight,
+    const Consensus::Params& consensusParams,
+    CAmount nFees)
 {
-    if (block.vtx.empty()) return false;
+    if (block.vtx.empty()) {
+        return false;
+    }
 
-    // Prior to activation height, defer to standard verification layers
-    if (nHeight < 965666) {
+    // ก่อนถึงความสูงที่กำหนด ให้ผ่านไปใช้กฎปกติของบิตคอยน์
+    if (nHeight < EDWB_ACTIVATION_HEIGHT) {
         return true;
     }
 
-    // Determine expected reward for EDWB Sovereign Chain
-    CAmount nExpectedSubsidy = GetEDWBBlockSubsidy(nHeight);
-    
-    // Sum up actual value generated in the coinbase transaction outputs
+    const CTransaction& coinbase = *block.vtx[0];
     CAmount nActualCoinbaseValue = 0;
-    for (const auto& txout : block.vtx[0]->vout) {
+
+    // ตรวจสอบมูลค่าเอาต์พุตแต่ละตัว ป้องกัน Overflow ด้วย MoneyRange
+    for (const auto& txout : coinbase.vout) {
+        if (!MoneyRange(txout.nValue)) {
+            return false;
+        }
+
         nActualCoinbaseValue += txout.nValue;
+
+        if (!MoneyRange(nActualCoinbaseValue)) {
+            return false;
+        }
     }
 
-    // Enforce strict monetary constraint: Coinbase cannot exceed Subsidy + Fees
+    // ใช้ฟังก์ชัน GetBlockSubsidy ตัวหลักที่เป็น Single Source of Truth
+    const CAmount nExpectedSubsidy = Consensus::GetBlockSubsidy(nHeight, consensusParams);
+
+    if (nFees < 0 || !MoneyRange(nFees)) {
+        return false;
+    }
+
+    // ตรวจสอบกฎเหล็ก: ยอดรวม Coinbase ต้องไม่เกิน Subsidy + Fees
     if (nActualCoinbaseValue > nExpectedSubsidy + nFees) {
         return false;
     }
@@ -2492,17 +2483,17 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // =========================================================================
     if (nHeight == Consensus::EDWB_ACTIVATION_HEIGHT) {
         if (!pindex->pprev || pindex->pprev->nHeight != Consensus::EDWB_ANCHOR_HEIGHT) {
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-edwb-anchor-height",
-                                "EDWB Sovereign Consensus: Block 965666 must directly follow anchor height 965666");
-        }
+    return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-edwb-anchor-height",
+                        "EDWB Sovereign Consensus: Block 965800 must directly follow anchor height 965799");
+}
         if (pindex->pprev->GetBlockHash() != Consensus::EDWB_ANCHOR_HASH) {
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-edwb-anchor-hash",
                                 "EDWB Sovereign Consensus: Anchor block hash mismatch");
         }
     }
-    // ต่อด้วยโค้ดเดิมที่เหลือของ ConnectBlock ตามปกติ...    // (หมายเหตุ: ค่า nFees ของบล็อกจะถูกคำนวณจากยอดรวมธุรกรรมระหว่างรัน Loop ใน ConnectBlock 
+   
+ // ต่อด้วยโค้ดเดิมที่เหลือของ ConnectBlock ตามปกติ...    // (หมายเหตุ: ค่า nFees ของบล็อกจะถูกคำนวณจากยอดรวมธุรกรรมระหว่างรัน Loop ใน ConnectBlock 
     // เราสามารถเรียกตรวจสอบ VerifyEDWBBlockCoinbase ร่วมกับยอด nFees ที่แท้จริงได้ทันทีที่คำนวณค่าธรรมเนียมเสร็จ)
-
     // Check it again in case a previous version let a bad block in
     // NOTE: We don't currently (re-)invoke ContextualCheckBlock() or
     // ContextualCheckBlockHeader() here. This means that if we add a new
@@ -2788,35 +2779,24 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         }
         UpdateCoins(tx, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight);
     }
-    // =========================================================================
-    // ⚡ EDWB SOVEREIGN CONSENSUS HOOK: Coinbase & Vault Verification
-    // =========================================================================
+        // ============================================================================
+    // ⚡ EDWB SOVEREIGN CONSENSUS HOOK: Coinbase Validation
+    // ============================================================================
     if (state.IsValid() && !VerifyEDWBBlockCoinbase(block, nHeight, consensusParams, nFees)) {
-        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-edwb-cb-amount",
-                            "EDWB Sovereign Consensus: Coinbase reward or Vault allocation mismatch");
+        return state.Invalid(
+            BlockValidationResult::BLOCK_CONSENSUS, 
+            "bad-edwb-cb-amount",
+            strprintf("EDWB Sovereign Consensus: Coinbase exceeds allowed subsidy plus fees (height=%d)", nHeight)
+        );
     }
 	
-            const auto time_3{SteadyClock::now()};
+    const auto time_3{SteadyClock::now()};
     m_chainman.time_connect += time_3 - time_2;
-   LogDebug(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(),
-             Ticks<MillisecondsDouble>(time_3 - time_2), Ticks<MillisecondsDouble>(time_3 - time_2) / block.vtx.size(),
-             nInputs <= 1 ? 0 : Ticks<MillisecondsDouble>(time_3 - time_2) / (nInputs - 1),
-             Ticks<SecondsDouble>(m_chainman.time_connect),
-             Ticks<MillisecondsDouble>(m_chainman.time_connect) / m_chainman.num_blocks_total);
-
-    // ============================================================================
-    // WARLORD CONSENSUS VALIDATION: CHECK COINBASE TOTAL REWARD
-    // ============================================================================
-    CAmount blockReward = nFees + Consensus::GetBlockSubsidy(pindex->nHeight, consensusParams);
-    
-    if (pindex->nHeight == 965666) {
-        blockReward = 21000000 * COIN;
-    }
-
-    if (block.vtx[0]->GetValueOut() > blockReward && state.IsValid()) {
-        state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount",
-                    strprintf("coinbase pays too much (actual=%d vs limit=%d)", block.vtx[0]->GetValueOut(), blockReward));
-    }
+    LogDebug(BCLog::BENCH, "     - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(),
+            Ticks<MillisecondsDouble>(time_3 - time_2), Ticks<MillisecondsDouble>(time_3 - time_2) / block.vtx.size(),
+            nInputs <= 1 ? 0 : Ticks<MillisecondsDouble>(time_3 - time_2) / (nInputs - 1),
+            Ticks<SecondsDouble>(m_chainman.time_connect),
+            Ticks<MillisecondsDouble>(m_chainman.time_connect) / m_chainman.num_blocks_total);
 
     if (control) {
         auto parallel_result = control->Complete();
@@ -2824,22 +2804,24 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, strprintf("block-script-verify-flag-failed (%s)", ScriptErrorString(parallel_result->first)), parallel_result->second);
         }
     }
+    
     if (!state.IsValid()) {
         LogInfo("Block validation error: %s", state.ToString());
         return false;
     }
+    
     const auto time_4{SteadyClock::now()};
     m_chainman.time_verify += time_4 - time_2;
     LogDebug(BCLog::BENCH, "    - Verify %u txins: %.2fms (%.3fms/txin) [%.2fs (%.2fms/blk)]\n", nInputs - 1,
-             Ticks<MillisecondsDouble>(time_4 - time_2),
-             nInputs <= 1 ? 0 : Ticks<MillisecondsDouble>(time_4 - time_2) / (nInputs - 1),
-             Ticks<SecondsDouble>(m_chainman.time_verify),
-             Ticks<MillisecondsDouble>(m_chainman.time_verify) / m_chainman.num_blocks_total);
+            Ticks<MillisecondsDouble>(time_4 - time_2),
+            nInputs <= 1 ? 0 : Ticks<MillisecondsDouble>(time_4 - time_2) / (nInputs - 1),
+            Ticks<SecondsDouble>(m_chainman.time_verify),
+            Ticks<MillisecondsDouble>(m_chainman.time_verify) / m_chainman.num_blocks_total);
 
     if (fJustCheck) {
         return true;
     }
-
+    
     if (!m_blockman.WriteBlockUndo(blockundo, state, *pindex)) {
         return false;
     }

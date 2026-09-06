@@ -19,10 +19,10 @@ namespace Consensus {
 // EDWB SOVEREIGN CONSENSUS CONSTANTS & MONETARY ENGINE
 // ============================================================================
 
-static constexpr int EDWB_ANCHOR_HEIGHT = 965665;
-static constexpr int EDWB_ACTIVATION_HEIGHT = 965666;
+static constexpr int EDWB_ANCHOR_HEIGHT = 965799;
+static constexpr int EDWB_ACTIVATION_HEIGHT = 965800;
 static constexpr int EDWB_EXPANSION_LIMIT = 1500000;
-static constexpr int EDWB_EXPANSION_END_HEIGHT = 2465666;
+static constexpr int EDWB_EXPANSION_END_HEIGHT = 2465800;
 
 inline const uint256 EDWB_ANCHOR_HASH = uint256{"0000000000000000000000000000000000000000000000000000000000000000"};
 inline constexpr std::array<int64_t, 10> EDWB_FIB_SEQUENCE{

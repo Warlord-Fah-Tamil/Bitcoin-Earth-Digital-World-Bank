@@ -175,7 +175,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
 
         // จัดการสร้างโครงสร้าง Coinbase ตามกฎ EDWB Sovereign Consensus
         if (nHeight == Consensus::EDWB_ACTIVATION_HEIGHT) {
-            // Phase 1: Block 965666 (21M COIN Vault)
+            // Phase 1: Block 965800 (21M COIN Vault)
             coinbaseTx.vout.clear();
 
             // สร้าง ScriptPubKey สำหรับ Vault (ใช้ P2PKH หรือ Script มาตรฐานตามโครงสร้างโปรเจกต์)
