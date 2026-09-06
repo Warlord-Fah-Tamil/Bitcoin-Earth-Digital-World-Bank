@@ -191,6 +191,7 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   consensus/tx_verify.cpp
   dbwrapper.cpp
   deploymentstatus.cpp
+  edwb_mirror.cpp
   flatfile.cpp
   headerssync.cpp
   httprpc.cpp

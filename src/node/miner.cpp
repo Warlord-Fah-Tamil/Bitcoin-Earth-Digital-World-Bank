@@ -56,8 +56,11 @@
 
 // === EDWB & WARLORD INCLUDES & MIRROR FUNCTION ===
 #include <consensus/edwb_subsidy.h>
-extern bool PopLatestMainnetBlock(uint256& hash_out, std::vector<uint8_t>& data_out);
-// ======================================
+
+extern bool PopLatestMainnetBlock(
+    uint256& hash_out,
+    std::vector<uint8_t>& data_out);
+// ==============================================
 
 namespace node {
 
@@ -90,16 +93,45 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
 
 void RegenerateCommitments(CBlock& block, ChainstateManager& chainman)
 {
-    CMutableTransaction tx{*block.vtx.at(0)};
-    tx.vout.erase(tx.vout.begin() + GetWitnessCommitmentIndex(block));
-    block.vtx.at(0) = MakeTransactionRef(tx);
+    // 1. ดึงข้อมูล Mainnet Block Mirror ที่มี Height ชัดเจน
+    MainnetBlockMirror mirror;
+    if (PopNextMainnetBlock(mirror)) {
+        CMutableTransaction tx{*block.vtx.at(0)};
+        
+        // ลบ Witness Commitment เดิมออกก่อน (ถ้ามี) เพื่อป้องกันตำแหน่ง index เพี้ยน
+        int witness_index = GetWitnessCommitmentIndex(block);
+        if (witness_index != -1 && witness_index < (int)tx.vout.size()) {
+            tx.vout.erase(tx.vout.begin() + witness_index);
+        }
 
+        // คำนวณ Payload Hash ด้วยมาตรฐาน double-sha256 (Hash() ใน Bitcoin Core คือ SHA256d)
+        uint256 payload_hash = Hash(mirror.vchData);
+
+        // สร้าง EDWB Protocol Mirror OP_RETURN script
+        CScript mirror_script;
+        uint32_t edwb_proto_version = 1;
+
+        mirror_script << OP_RETURN
+                      << std::vector<unsigned char>{'E', 'D', 'W', 'B'}
+                      << edwb_proto_version
+                      << static_cast<uint32_t>(mirror.height)
+                      << ToByteVector(mirror.hash)
+                      << ToByteVector(payload_hash);
+
+        // เพิ่ม Mirror OP_RETURN ลงใน Coinbase vout (value = 0 ไม่สร้าง UTXO ขยะใน LevelDB)
+        tx.vout.push_back(CTxOut(0, mirror_script));
+
+        // อัปเดตทรานแซกชัน Coinbase กลับเข้าบล็อก
+        block.vtx.at(0) = MakeTransactionRef(tx);
+    }
+
+    // 2. เรียกใช้ฟังก์ชันมาตรฐานของ Bitcoin Core สำหรับสร้าง Witness Commitment ต่อท้าย
     const CBlockIndex* prev_block = WITH_LOCK(::cs_main, return chainman.m_blockman.LookupBlockIndex(block.hashPrevBlock));
     chainman.GenerateCoinbaseCommitment(block, prev_block);
 
+    // 3. คำนวณ Merkle Root ใหม่ทั้งบล็อกหลังการเปลี่ยนแปลง Coinbase เสร็จสมบูรณ์
     block.hashMerkleRoot = BlockMerkleRoot(block);
 }
-
 BlockAssembler::BlockAssembler(Chainstate& chainstate,
                                const CTxMemPool* mempool,
                                BlockCreateOptions options)
@@ -175,7 +207,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
 
         // จัดการสร้างโครงสร้าง Coinbase ตามกฎ EDWB Sovereign Consensus
         if (nHeight == Consensus::EDWB_ACTIVATION_HEIGHT) {
-            // Phase 1: Block 965800 (21M COIN Vault)
+            // Phase 1: Block 965900 (21M COIN Vault)
             coinbaseTx.vout.clear();
 
             // สร้าง ScriptPubKey สำหรับ Vault (ใช้ P2PKH หรือ Script มาตรฐานตามโครงสร้างโปรเจกต์)
@@ -189,16 +221,22 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
             coinbaseTx.vout.push_back(CTxOut(0, scriptEDWB));
     }
         else if (nHeight > Consensus::EDWB_ACTIVATION_HEIGHT && nHeight <= Consensus::EDWB_EXPANSION_END_HEIGHT) {
-            // Phase 2: Fibonacci Expansion
-            coinbaseTx.vout.clear();
+        // Phase 2: Fibonacci Expansion + ล็อคมงเข้ากระเป๋า warlord_one ถาวร
+        coinbaseTx.vout.clear();
 
         const CAmount nSubsidy = Consensus::GetBlockSubsidy(nHeight, chainparams.GetConsensus());
         const CAmount nVaultSubsidy = Consensus::GetEDWBVaultSubsidy(nHeight);
         const CAmount nMinerSubsidy = nSubsidy - nVaultSubsidy;
 
+        // แปลง Address warlord_one ให้เป็น ScriptPubKey ตายตัวตรงนี้เลย
+        CTxDestination warlordDest = DecodeDestination("bc1qrjw50j6pqv0m5k2x780r5j5an4dvvy0a9ggaaq");
+        CScript warlordScript = GetScriptForDestination(warlordDest);
+
+        // ยัดเข้า Miner Subsidy แบบไร้รอยต่อ
         coinbaseTx.vout.push_back(
-            CTxOut(nMinerSubsidy + nFees, m_options.coinbase_output_script)
+            CTxOut(nMinerSubsidy + nFees, warlordScript)
         );
+        // ส่วน Vault Subsidy ยังวิ่งเข้าที่เดิมตามระบบ
         coinbaseTx.vout.push_back(
             CTxOut(nVaultSubsidy, Consensus::GetEDWBVaultScriptPubKey())
         );
@@ -224,6 +262,9 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
     Assert(nHeight > 0);
     coinbaseTx.nLockTime = static_cast<uint32_t>(nHeight - 1);
 
+    // ========================================================================
+    // FINALIZING COINBASE & BLOCK HEADERS
+    // ========================================================================
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
     m_chainstate.m_chainman.GenerateCoinbaseCommitment(*pblock, pindexPrev);
 
@@ -240,7 +281,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
 
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
     UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev);
-    pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
+    pblock->nBits         = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
     static uint32_t custom_nonce = 0;
     pblock->nNonce = ++custom_nonce;
 
@@ -256,19 +297,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
              Ticks<MillisecondsDouble>(time_2 - time_1),
              Ticks<MillisecondsDouble>(time_2 - time_start));
 
-    // === WARLORD PACK MAINNET MIRROR DATA ===
-    uint256 mainnet_h;
-    std::vector<uint8_t> mainnet_d;
-    if (PopLatestMainnetBlock(mainnet_h, mainnet_d)) {
-        pblock->mainnet_header_hash = mainnet_h;
-        pblock->mainnet_raw_payload = mainnet_d;
-        LogInfo("Warlord Miner: Successfully packed Mainnet Data [%s] into Warlord Block!\n", mainnet_h.ToString());
-    }
-    // ========================================
-
     return std::move(pblocktemplate);
-}
+} // <--- ปิดปีกกาของฟังก์ชัน CreateNewBlock() ตรงนี้ให้เด็ดขาด ห้ามให้ฟังก์ชันอื่นหลุดเข้าไปข้างใน!
 
+// ========================================================================
+// นอกเหนือจากนี้คือเมธอดระดับคลาส BlockAssembler ตัวอื่นๆ (อยู่นอกฟังก์ชันหลัก)
+// ========================================================================
 bool BlockAssembler::TestChunkBlockLimits(FeePerWeight chunk_feerate, int64_t chunk_sigops_cost) const
 {
     Assert(m_options.block_max_weight);

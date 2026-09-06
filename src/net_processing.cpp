@@ -88,30 +88,8 @@
 #include <typeinfo>
 #include <unordered_set>
 #include <utility>
-// === WARLORD UNIFIED MIRROR QUEUE ===
-#include <mutex>
-#include <queue>
+#include <consensus/edwb_subsidy.h>
 #include <streams.h>
-
-struct MainnetBlockMirror {
-    uint256 hash;
-    std::vector<uint8_t> vchData; 
-};
-static std::mutex g_warlord_mirror_mutex;
-static std::queue<MainnetBlockMirror> g_warlord_mirror_queue;
-
-// ฟังก์ชันสำหรับดึงข้อมูล Mainnet ล่าสุดไปใช้งาน (จะใช้ใน miner.cpp)
-bool PopLatestMainnetBlock(uint256& hash_out, std::vector<uint8_t>& data_out) {
-    std::lock_guard<std::mutex> lock(g_warlord_mirror_mutex);
-    if (g_warlord_mirror_queue.empty()) return false;
-    
-    auto item = g_warlord_mirror_queue.front();
-    g_warlord_mirror_queue.pop();
-    hash_out = item.hash;
-    data_out = std::move(item.vchData);
-    return true;
-}
-// =====================================
 
 using kernel::ChainstateRole;
 using namespace util::hex_literals;
@@ -5116,83 +5094,107 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
     }
 
     if (msg_type == NetMsgType::BLOCK) {
-        // === WARLORD MIRROR INGESTION ===
+
+        // ========================================================================
+        // Ignore block received while importing.
+        //
+        // Do this BEFORE Mirror ingestion so block-import/reindex operations
+        // cannot fill the Mirror RAM queue unnecessarily.
+        // ========================================================================
+        if (m_chainman.m_blockman.LoadingBlocks()) {
+            LogDebug(
+                BCLog::NET,
+                "Unexpected block message received from peer %d while loading blocks\n",
+                pfrom.GetId()
+            );
+            return;
+        }
+
+        // ========================================================================
+        // WARLORD MIRROR INGESTION & BACKPRESSURE
+        // ========================================================================
         try {
-            std::vector<uint8_t> raw_bytes;
-            auto s = MakeByteSpan(vRecv);
-            raw_bytes.reserve(s.size());
-            for (const auto& b : s) {
-                raw_bytes.push_back(std::to_integer<uint8_t>(b));
-            }
+            if (IsMainnetMirrorQueueFull()) {
+                LogInfo("Warlord Mirror: Backpressure active, skipping Mirror capture from peer %d\n", pfrom.GetId());
+            } else {
+                std::vector<uint8_t> raw_bytes;
+                auto s = MakeByteSpan(vRecv);
 
-            if (raw_bytes.size() >= 80) {
-                SpanReader stream(raw_bytes);
-                CBlockHeader header;
-                stream >> header;
-                
-                uint256 computed_block_hash = header.GetHash();
+                if (s.size() < 80) {
+                    LogInfo("Warlord Mirror: ignoring undersized BLOCK payload (%zu bytes) from peer %d\n", s.size(), pfrom.GetId());
+                } else {
+                    raw_bytes.reserve(s.size());
+                    for (const auto& b : s) {
+                        raw_bytes.push_back(std::to_integer<uint8_t>(b));
+                    }
 
-                MainnetBlockMirror mirror_item;
-                mirror_item.hash = computed_block_hash;
-                
-                // ⚠️ เช็กชื่อ field ใน struct ของท่านด้วยนะ (เช่น .vchData, .data หรือ .block_data)
-                mirror_item.vchData = std::move(raw_bytes); 
+                    SpanReader stream(raw_bytes);
+                    CBlockHeader header;
+                    stream >> header;
 
-                {
-                    std::lock_guard<std::mutex> lock(g_warlord_mirror_mutex);
-                    g_warlord_mirror_queue.push(std::move(mirror_item));
+                    const uint256 computed_block_hash = header.GetHash();
+
+                    MainnetBlockMirror mirror_item;
+                    mirror_item.height = 0; // Unresolved at ingestion; synced later
+                    mirror_item.hash = computed_block_hash;
+                    mirror_item.vchData = std::move(raw_bytes);
+
+                    if (!PushMainnetMirrorBlock(std::move(mirror_item))) {
+                        LogInfo("Warlord Mirror: Backpressure rejected Mainnet block %s from peer %d\n", computed_block_hash.ToString(), pfrom.GetId());
+                    } else {
+                        LogInfo("Warlord Mirror: captured raw Mainnet block %s from peer %d\n", computed_block_hash.ToString(), pfrom.GetId());
+                    }
                 }
             }
-        } catch (const std::exception&) {
-            // ข้าม Payload ที่ไม่สมบูรณ์
+        } catch (const std::exception& e) {
+            LogInfo("Warlord Mirror: failed to capture BLOCK from peer %d: %s\n", pfrom.GetId(), e.what());
+        } catch (...) {
+            LogInfo("Warlord Mirror: unknown exception while capturing BLOCK from peer %d\n", pfrom.GetId());
         }
+    }
 
-        // Ignore block received while importing
-        if (m_chainman.m_blockman.LoadingBlocks()) {
-            LogDebug(BCLog::NET, "Unexpected block message received from peer %d\n", pfrom.GetId());
-            return;
-        }
+    // ========================================================================
+    // NORMAL BITCOIN / EDWB BLOCK PROCESSING CONTINUES BELOW
+    // ========================================================================
+    std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
+    vRecv >> TX_WITH_WITNESS(*pblock);
 
-        std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
-        vRecv >> TX_WITH_WITNESS(*pblock);
+    LogDebug(BCLog::NET, "received block %s peer=%d\n", pblock->GetHash().ToString(), pfrom.GetId());
 
-        LogDebug(BCLog::NET, "received block %s peer=%d\n", pblock->GetHash().ToString(), pfrom.GetId());
+    const CBlockIndex* prev_block{WITH_LOCK(m_chainman.GetMutex(), return m_chainman.m_blockman.LookupBlockIndex(pblock->hashPrevBlock))};
 
-        const CBlockIndex* prev_block{WITH_LOCK(m_chainman.GetMutex(), return m_chainman.m_blockman.LookupBlockIndex(pblock->hashPrevBlock))};
-
-        // Check for possible mutation if it connects to something we know so we can check for DEPLOYMENT_SEGWIT being active
-        if (prev_block && IsBlockMutated(/*block=*/*pblock,
-                           /*check_witness_root=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT))) {
-            LogDebug(BCLog::NET, "Received mutated block from peer=%d\n", peer.m_id);
-            Misbehaving(peer, "mutated block");
-            WITH_LOCK(cs_main, RemoveBlockRequest(pblock->GetHash(), peer.m_id));
-            return;
-        }
-
-        bool forceProcessing = false;
-        const uint256 hash(pblock->GetHash());
-        bool min_pow_checked = false;
-        {
-            LOCK(cs_main);
-            // Always process the block if we requested it, since we may
-            // need it even when it's not a candidate for a new best tip.
-            forceProcessing = IsBlockRequested(hash);
-            RemoveBlockRequest(hash, pfrom.GetId());
-            // mapBlockSource is only used for punishing peers and setting
-            // which peers send us compact blocks, so the race between here and
-            // cs_main in ProcessNewBlock is fine.
-            mapBlockSource.emplace(hash, std::make_pair(pfrom.GetId(), true));
-
-            // Check claimed work on this block against our anti-dos thresholds.
-            if (prev_block && prev_block->nChainWork + GetBlockProof(*pblock) >= GetAntiDoSWorkThreshold()) {
-                min_pow_checked = true;
-            }
-        }
-        ProcessBlock(pfrom, pblock, forceProcessing, min_pow_checked);
+    // Check for possible mutation if it connects to something we know so we can check for DEPLOYMENT_SEGWIT being active
+    if (prev_block && IsBlockMutated(/*block=*/*pblock,
+                            /*check_witness_root=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT))) {
+        LogDebug(BCLog::NET, "Received mutated block from peer=%d\n", peer.m_id);
+        Misbehaving(peer, "mutated block");
+        WITH_LOCK(cs_main, RemoveBlockRequest(pblock->GetHash(), peer.m_id));
         return;
     }
 
-    if (msg_type == NetMsgType::GETADDR) {
+    bool forceProcessing = false;
+    const uint256 hash(pblock->GetHash());
+    bool min_pow_checked = false;
+    {
+        LOCK(cs_main);
+        // Always process the block if we requested it, since we may
+        // need it even when it's not a candidate for a new best tip.
+        forceProcessing = IsBlockRequested(hash);
+        RemoveBlockRequest(hash, pfrom.GetId());
+        // mapBlockSource is only used for punishing peers and setting
+        // which peers send us compact blocks, so the race between here and
+        // cs_main in ProcessNewBlock is fine.
+        mapBlockSource.emplace(hash, std::make_pair(pfrom.GetId(), true));
+
+        // Check claimed work on this block against our anti-dos thresholds.
+        if (prev_block && prev_block->nChainWork + GetBlockProof(*pblock) >= GetAntiDoSWorkThreshold()) {
+            min_pow_checked = true;
+        }
+    }
+    ProcessBlock(pfrom, pblock, forceProcessing, min_pow_checked);
+    return;
+ 
+   if (msg_type == NetMsgType::GETADDR) {
         // This asymmetric behavior for inbound and outbound connections was introduced
         // to prevent a fingerprinting attack: an attacker can send specific fake addresses
         // to users' AddrMan and later request them by sending getaddr messages.

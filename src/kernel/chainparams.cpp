@@ -119,7 +119,7 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 29;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = 0; // เปิดใช้งานสัญญาณทันที
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 965800;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 965900;
 
         consensus.nSubsidyHalvingInterval = 210000;
 
@@ -149,7 +149,7 @@ consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].threshold = 1815; // 90%
         // ========================================================
         // [WARLORD DUAL-LAYER PARAMETERS]
         // ========================================================
-        consensus.WarlordAnchorHeight = 965800;
+        consensus.WarlordAnchorHeight = 965899;
         consensus.nWarlordTargetSpacing = 3;
         // ========================================================
 

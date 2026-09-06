@@ -14,7 +14,7 @@
 // ⚡ Warlord Dynamic Consensus Helpers for 3-Second Blocks after Height 965,000
 inline int64_t GetWarlordTargetSpacing(int nHeight, const Consensus::Params& params)
 {
-    if (nHeight >= 965800) {
+    if (nHeight >= 965900) {
         return 3; // 3 seconds after block 965,800
     }
     return params.nPowTargetSpacing;
@@ -22,7 +22,7 @@ inline int64_t GetWarlordTargetSpacing(int nHeight, const Consensus::Params& par
 
 inline int64_t GetWarlordTargetTimespan(int nHeight, const Consensus::Params& params)
 {
-    if (nHeight >= 965800) {
+    if (nHeight >= 965900) {
         return 3 * params.DifficultyAdjustmentInterval(); // 3 seconds * 2016 blocks = 6048 seconds
     }
     return params.nPowTargetTimespan;

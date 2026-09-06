@@ -77,10 +77,6 @@ public:
     mutable bool m_checked_witness_commitment{false};
     mutable bool m_checked_merkle_root{false};
 
-    // Dual-state fields
-    uint256 mainnet_header_hash;
-    std::vector<uint8_t> mainnet_raw_payload;
-
     CBlock() {
         SetNull();
     }
@@ -94,10 +90,6 @@ public:
     {
         READWRITE(AsBase<CBlockHeader>(obj));
         READWRITE(obj.vtx);
-        // ⚡ WARLORD FIX: ตัด 2 Field นี้ออกจากการส่งผ่าน Network Stream 
-        // เพื่อให้โครงสร้างบล็อกตรงกับ Mainnet 100% ป้องกัน Deserialization Error
-        // READWRITE(obj.mainnet_header_hash);
-        // READWRITE(obj.mainnet_raw_payload);
     }
 
     void SetNull()
@@ -107,8 +99,6 @@ public:
         fChecked = false;
         m_checked_witness_commitment = false;
         m_checked_merkle_root = false;
-        mainnet_header_hash.SetNull();
-        mainnet_raw_payload.clear();
     }
 
     CBlockHeader GetBlockHeader() const
@@ -119,7 +109,7 @@ public:
         block.hashMerkleRoot = hashMerkleRoot;
         block.nTime          = nTime;
         block.nBits          = nBits;
-        block.nNonce         = nNonce;
+        block.nNonce          = nNonce;
         return block;
     }
 

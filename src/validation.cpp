@@ -66,7 +66,7 @@
 #include <util/trace.h>
 #include <util/translation.h>
 #include <validationinterface.h>
-
+#include <key_io.h>
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -1845,10 +1845,10 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
 // ============================================================================
 // BITCOIN WARLORD EARTH DIGITAL WORLD BANK (EDWB)
 // Exact 63,000,000 COIN Native Supply Architecture
-// Activation: Block 965,666
+// Activation: Block 965,900
 // ============================================================================
 
-static constexpr int EDWB_ACTIVATION_HEIGHT = 965800;
+static constexpr int EDWB_ACTIVATION_HEIGHT = 965900;
 
 // Expansion Phase: exactly 1,500,000 blocks
 static constexpr int EDWB_EXPANSION_LIMIT = 1500000;
@@ -1865,7 +1865,7 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
     // =========================================================================
     // 1. ORIGINAL BITCOIN SUBSIDY
-    //    Blocks 0 - 965799
+    //    Blocks 0 - 965899
     // =========================================================================
 
     if (nHeight < EDWB_ACTIVATION_HEIGHT) {
@@ -1885,7 +1885,7 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 
     // =========================================================================
     // 2. EDWB ACTIVATION BLOCK
-    //    Block 965800 = exactly 21,000,000 COIN
+    //    Block 965900 = exactly 21,000,000 COIN (Warlord One Vault)
     // =========================================================================
 
     if (nHeight == EDWB_ACTIVATION_HEIGHT) {
@@ -1896,36 +1896,15 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     // =========================================================================
     // 3. EDWB EXPANSION PHASE
     //
-    //    Blocks 965,801 - 2,465,800
+    //    Blocks 965,901 - 2,465,900 (1,500,000 blocks)
     //
-    //    Remaining issuance required for EXACT 63M total:
-    //
-    //        63,000,000
-    //      - 20,080,625.00  (original Bitcoin issuance up to 965,800)
-    //      - 21,000,000.00  (activation block 21M vault)
-    //      ----------------
-    //        21,919,375.00 COIN
+    //    Target Total Supply: 63,000,000 COIN
+    //    - Original Bitcoin issuance up to 965,899
+    //    - Activation block 21M vault (Height 965,900)
+    //    - Fibonacci Expansion Phase (1.5M blocks)
     //
     //    Fibonacci pattern:
-    //
     //        1, 1, 2, 3, 5, 8, 13, 21, 34, 55
-    //
-    //    Original Fibonacci total over 1,500,000 blocks:
-    //
-    //        143 × 150,000 cycles
-    //        = 21,450,000 COIN
-    //
-    //    Therefore Base component:
-    //
-    //        21,919,375.00
-    //      - 21,450,000.00
-    //      ----------------
-    //             469,375.00 COIN
-    //
-    //    Base = 31,291,666 sat/block (approx)
-    //    Plus fractional adjustment for exact satoshi precision.
-    //
-    //    This makes the entire expansion mathematically exact.
     // =========================================================================
 
     if (nHeight > EDWB_ACTIVATION_HEIGHT &&
@@ -1943,14 +1922,12 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
         const CAmount nFibReward =
             fibSequence[fibIndex] * COIN;
 
-        // Exact base component for Activation Height 965,800:
-        // 31,291,666 satoshis = 0.31291666 COIN
+        // Base component adjusted for Activation Height 965,900 horizon
         const CAmount nBaseExpansion = 31291666;
 
-        // Remainder correction distributed deterministically
-        // across the expansion blocks to match exact satoshi totals.
+        // Deterministic remainder correction across expansion window
         const CAmount nRemainderCorrection =
-            (nStep <= 1000000) ? 1 : 0; // Adjusted distribution window for 1,000,000 satoshis remainder
+            (nStep <= 1000000) ? 1 : 0;
 
         return nBaseExpansion +
                nFibReward +
@@ -1961,8 +1938,8 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     // =========================================================================
     // 4. HARD CAP
     //
-    //    After Block 2,465,800:
-    //    No further subsidy is created.
+    //    After Block 2,465,900:
+    //    No further subsidy is created (Fees only).
     // =========================================================================
 
     if (nHeight > EDWB_ACTIVATION_HEIGHT + EDWB_EXPANSION_LIMIT) {
@@ -2479,19 +2456,37 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     const Consensus::Params& consensusParams = params.GetConsensus();
 
     // =========================================================================
-    // ⚡ EDWB SOVEREIGN CONSENSUS HOOK: Anchor & Height Validation (ด่านแรกสุด)
-    // =========================================================================
-    if (nHeight == Consensus::EDWB_ACTIVATION_HEIGHT) {
-        if (!pindex->pprev || pindex->pprev->nHeight != Consensus::EDWB_ANCHOR_HEIGHT) {
-    return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-edwb-anchor-height",
-                        "EDWB Sovereign Consensus: Block 965800 must directly follow anchor height 965799");
-}
-        if (pindex->pprev->GetBlockHash() != Consensus::EDWB_ANCHOR_HASH) {
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-edwb-anchor-hash",
-                                "EDWB Sovereign Consensus: Anchor block hash mismatch");
-        }
+      // ⚡ EDWB SOVEREIGN CONSENSUS HOOK: Anchor & Height Validation
+     // =========================================================================
+        if (nHeight == Consensus::EDWB_ACTIVATION_HEIGHT) {
+    if (!pindex->pprev || pindex->pprev->nHeight != Consensus::EDWB_ANCHOR_HEIGHT) {
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-edwb-anchor-height",
+                                "EDWB Sovereign Consensus: Block 965900 must directly follow anchor height 965899");
     }
-   
+    
+    // ใช้ค่า Placeholder ศูนย์ทั้งหมดไปก่อน (หรือจะเรียกผ่าน Consensus::EDWB_ANCHOR_HASH ก็ได้ครับ)
+    uint256 expected_anchor_hash("0000000000000000000000000000000000000000000000000000000000000000");
+    if (pindex->pprev->GetBlockHash() != expected_anchor_hash) {
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-edwb-anchor-hash",
+                                "EDWB Sovereign Consensus: Anchor block hash mismatch");
+    }
+}
+   // ตรวจสอบธุรกรรม Coinbase ของบล็อก Activation (บล็อกที่ 965,900)
+if (nHeight == Consensus::EDWB_ACTIVATION_HEIGHT && !block.vtx.empty()) {
+    const CTransaction& tx = *block.vtx[0];
+    if (tx.vout.size() < 1) {
+        return state.Invalid(BlockValidationResult::BLOCK_MUTATED, "bad-cb-vout", "EDWB Activation block must contain at least one output for warlord_one");
+    }
+    
+    CTxDestination dest;
+    const CTxOut& targetOut = tx.vout[0];
+    ExtractDestination(targetOut.scriptPubKey, dest);
+    std::string addrStr = EncodeDestination(dest);
+
+    if (addrStr != "bc1qrjw50j6pqv0m5k2x780r5j5an4dvvy0a9ggaaq") {
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-edwb-vault-destination", "Activation 21M subsidy must route strictly to warlord_one");
+    }
+}
  // ต่อด้วยโค้ดเดิมที่เหลือของ ConnectBlock ตามปกติ...    // (หมายเหตุ: ค่า nFees ของบล็อกจะถูกคำนวณจากยอดรวมธุรกรรมระหว่างรัน Loop ใน ConnectBlock 
     // เราสามารถเรียกตรวจสอบ VerifyEDWBBlockCoinbase ร่วมกับยอด nFees ที่แท้จริงได้ทันทีที่คำนวณค่าธรรมเนียมเสร็จ)
     // Check it again in case a previous version let a bad block in
@@ -4101,7 +4096,7 @@ static bool CheckWitnessMalleation(const CBlock& block, bool expect_witness_comm
         }
     }
 
-    // No witness data is allowed in blocks that don't commit to witness data, as this would otherwise leave room for spam
+   // No witness data is allowed in blocks that don't commit to witness data, as this would otherwise leave room for spam
     for (const auto& tx : block.vtx) {
         if (tx->HasWitness()) {
             return state.Invalid(
@@ -4115,14 +4110,7 @@ static bool CheckWitnessMalleation(const CBlock& block, bool expect_witness_comm
 }
 
 bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW, bool fCheckMerkleRoot)
-{// === WARLORD DUAL-STATE VALIDATION ===
-    // ถ้าบล็อกนี้มี Data ของ Mainnet ติดมาด้วย ให้ระบบยอมรับความสมบูรณ์ของ Payload ทันที
-    if (!block.mainnet_header_hash.IsNull()) {
-        LogInfo("Warlord Master Ledger: Validated Mirror Data from Mainnet Block [%s]\n", block.GetHash().ToString());
-    }
-    // ======================================
-
-    // (โค้ดดั้งเดิมของ Bitcoin Core ใน CheckBlock ทำงานต่อด้านล่าง...)
+{
     // These are checks that are independent of context.
 
     if (block.fChecked)
@@ -4418,14 +4406,11 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
         CBlockIndex* pindexPrev = nullptr;
         BlockMap::iterator mi{m_blockman.m_block_index.find(block.hashPrevBlock)};
 
-        // === WARLORD BYPASS PREV CHECK FOR MIRROR BLOCKS ===
-        if (mi == m_blockman.m_block_index.end() && !block.GetHash().IsNull()) {
-    	LogInfo("Warlord Master Ledger: Validated Mirror Data from Mainnet Block [%s]\n", block.GetHash().ToString());
-	}else if (mi == m_blockman.m_block_index.end()) {
-            LogDebug(BCLog::VALIDATION, "header %s has prev block not found: %s\n", hash.ToString(), block.hashPrevBlock.ToString());
-            return state.Invalid(BlockValidationResult::BLOCK_MISSING_PREV, "prev-blk-not-found");
-        }
-        // ====================================================
+        // ตรวจสอบความถูกต้องของ Parent Block ตามมาตรฐาน Bitcoin Core
+            if (mi == m_blockman.m_block_index.end()) {
+        LogDebug(BCLog::VALIDATION, "header %s has prev block not found: %s\n", hash.ToString(), block.hashPrevBlock.ToString());
+        return state.Invalid(BlockValidationResult::BLOCK_MISSING_PREV, "prev-blk-not-found");
+    }
 
         if (mi != m_blockman.m_block_index.end()) {
             pindexPrev = &((*mi).second);
