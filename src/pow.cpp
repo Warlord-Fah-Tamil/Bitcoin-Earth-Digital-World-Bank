@@ -11,59 +11,24 @@
 #include <uint256.h>
 #include <util/check.h>
 
-// ⚡ Warlord Dynamic Consensus Helpers for 3-Second Blocks after Height 965,000
+// ⚡ Warlord Dynamic Consensus Constants
+static constexpr int64_t WARLORD_FAST_TARGET_SPACING = 6;
+static constexpr int64_t WARLORD_FAST_ACTIVATION_HEIGHT = 966600;
+
 inline int64_t GetWarlordTargetSpacing(int nHeight, const Consensus::Params& params)
 {
-    if (nHeight >= 965900) {
-        return 3; // 3 seconds after block 965,800
+    if (nHeight >= WARLORD_FAST_ACTIVATION_HEIGHT) {
+        return WARLORD_FAST_TARGET_SPACING;
     }
     return params.nPowTargetSpacing;
 }
 
 inline int64_t GetWarlordTargetTimespan(int nHeight, const Consensus::Params& params)
 {
-    if (nHeight >= 965900) {
-        return 3 * params.DifficultyAdjustmentInterval(); // 3 seconds * 2016 blocks = 6048 seconds
+    if (nHeight >= WARLORD_FAST_ACTIVATION_HEIGHT) {
+        return WARLORD_FAST_TARGET_SPACING * params.DifficultyAdjustmentInterval();
     }
     return params.nPowTargetTimespan;
-}
-
-unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
-{
-    assert(pindexLast != nullptr);
-    unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit).GetCompact();
-    int nextHeight = pindexLast->nHeight + 1;
-
-    // Only change once per difficulty adjustment interval
-    if (nextHeight % params.DifficultyAdjustmentInterval() != 0)
-    {
-        if (params.fPowAllowMinDifficultyBlocks)
-        {
-            // Special difficulty rule for testnet:
-            // If the new block's timestamp is more than 2 * target spacing
-            // then it MUST be a min-difficulty block.
-            int64_t targetSpacing = GetWarlordTargetSpacing(pindexLast->nHeight, params);
-            if (pblock->GetBlockTime().time_since_epoch().count() > pindexLast->GetBlockTime() + (targetSpacing * 2))
-                return nProofOfWorkLimit;
-            else
-            {
-                // Return the last non-special-min-difficulty-rules-block
-                const CBlockIndex* pindex = pindexLast;
-                while (pindex->pprev && pindex->nHeight % params.DifficultyAdjustmentInterval() != 0 && pindex->nBits == nProofOfWorkLimit)
-                    pindex = pindex->pprev;
-                return pindex->nBits;
-            }
-        }
-        return pindexLast->nBits;
-    }
-
-    // Go back by what we want to be 14 days worth of blocks (or adjusted timespan)
-    int nHeightFirst = pindexLast->nHeight - (params.DifficultyAdjustmentInterval()-1);
-    assert(nHeightFirst >= 0);
-    const CBlockIndex* pindexFirst = pindexLast->GetAncestor(nHeightFirst);
-    assert(pindexFirst);
-
-    return CalculateNextWorkRequired(pindexLast, pindexFirst->GetBlockTime(), params);
 }
 
 unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nFirstBlockTime, const Consensus::Params& params)
@@ -71,28 +36,20 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     if (params.fPowNoRetargeting)
         return pindexLast->nBits;
 
-    int64_t targetTimespan = GetWarlordTargetTimespan(pindexLast->nHeight, params);
+    int nextHeight = pindexLast->nHeight + 1;
+    int64_t targetTimespan = GetWarlordTargetTimespan(nextHeight, params);
 
-    // Limit adjustment step
+    // Limit adjustment step using Warlord target timespan (pindexLast->GetBlockTime() is int64_t)
     int64_t nActualTimespan = pindexLast->GetBlockTime() - nFirstBlockTime;
-    if (nActualTimespan < targetTimespan/4)
-        nActualTimespan = targetTimespan/4;
-    if (nActualTimespan > targetTimespan*4)
-        nActualTimespan = targetTimespan*4;
+    if (nActualTimespan < targetTimespan / 4)
+        nActualTimespan = targetTimespan / 4;
+    if (nActualTimespan > targetTimespan * 4)
+        nActualTimespan = targetTimespan * 4;
 
-    // Retarget
+    // Retarget calculation
     const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
     arith_uint256 bnNew;
-
-    // Special difficulty rule for Testnet4
-    if (params.enforce_BIP94) {
-        int nHeightFirst = pindexLast->nHeight - (params.DifficultyAdjustmentInterval()-1);
-        const CBlockIndex* pindexFirst = pindexLast->GetAncestor(nHeightFirst);
-        bnNew.SetCompact(pindexFirst->nBits);
-    } else {
-        bnNew.SetCompact(pindexLast->nBits);
-    }
-
+    bnNew.SetCompact(pindexLast->nBits);
     bnNew *= nActualTimespan;
     bnNew /= targetTimespan;
 
@@ -100,6 +57,45 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
         bnNew = bnPowLimit;
 
     return bnNew.GetCompact();
+}
+
+unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
+{
+    assert(pindexLast != nullptr);
+    unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit).GetCompact();
+    int nextHeight = pindexLast->nHeight + 1;
+    int64_t interval = params.DifficultyAdjustmentInterval();
+
+    // Only change once per difficulty adjustment interval
+    if (nextHeight % interval != 0)
+    {
+        if (params.fPowAllowMinDifficultyBlocks)
+        {
+            // Special difficulty rule for testnet/alt rule:
+            // pblock->GetBlockTime() is NodeSeconds, pindexLast->GetBlockTime() is int64_t
+            int64_t targetSpacing = GetWarlordTargetSpacing(nextHeight, params);
+            if (pblock->GetBlockTime().time_since_epoch().count() > pindexLast->GetBlockTime() + (targetSpacing * 2))
+                return nProofOfWorkLimit;
+            else
+            {
+                // Return the last non-special-min-difficulty-rules-block
+                const CBlockIndex* pindex = pindexLast;
+                while (pindex->pprev && pindex->nHeight % interval != 0 && pindex->nBits == nProofOfWorkLimit)
+                    pindex = pindex->pprev;
+                return pindex->nBits;
+            }
+        }
+        return pindexLast->nBits;
+    }
+
+    // Go back by interval blocks
+    int heightFirst = pindexLast->nHeight - (interval - 1);
+    assert(heightFirst >= 0);
+    const CBlockIndex* pindexFirst = pindexLast->GetAncestor(heightFirst);
+    assert(pindexFirst);
+
+    // Delegate actual calculation to the unified core function (pindexFirst->GetBlockTime() is int64_t)
+    return CalculateNextWorkRequired(pindexLast, pindexFirst->GetBlockTime(), params);
 }
 
 // Check that on difficulty adjustments, the new difficulty does not increase

@@ -1845,10 +1845,10 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
 // ============================================================================
 // BITCOIN WARLORD EARTH DIGITAL WORLD BANK (EDWB)
 // Exact 63,000,000 COIN Native Supply Architecture
-// Activation: Block 965,900
+// Activation: Block 966,600
 // ============================================================================
 
-static constexpr int EDWB_ACTIVATION_HEIGHT = 965900;
+static constexpr int EDWB_ACTIVATION_HEIGHT = 966600;
 
 // Expansion Phase: exactly 1,500,000 blocks
 static constexpr int EDWB_EXPANSION_LIMIT = 1500000;
@@ -1865,13 +1865,14 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
     // =========================================================================
     // 1. ORIGINAL BITCOIN SUBSIDY
-    //    Blocks 0 - 965899
+    //    Blocks 0 - 966599
     // =========================================================================
 
     if (nHeight < EDWB_ACTIVATION_HEIGHT) {
         CAmount nSubsidy = 50 * COIN;
 
-        int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
+        int halvings =
+            nHeight / consensusParams.nSubsidyHalvingInterval;
 
         if (halvings >= 64) {
             return 0;
@@ -1885,68 +1886,166 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 
     // =========================================================================
     // 2. EDWB ACTIVATION BLOCK
-    //    Block 965900 = exactly 21,000,000 COIN (Warlord One Vault)
+    //    Block 966600 = exactly 21,000,000 COIN
+    //    Warlord ONE Vault
     // =========================================================================
 
     if (nHeight == EDWB_ACTIVATION_HEIGHT) {
-        return 21000000 * COIN;
+        return 21000000LL * COIN;
     }
 
 
-    // =========================================================================
-    // 3. EDWB EXPANSION PHASE
+ // =========================================================================
+// 3. EDWB EXPANSION PHASE
+//
+//    Blocks 966,601 - 2,466,600 (1,500,000 blocks)
+//
+//    Target Expansion Supply: 21,000,000 COIN
+//
+//    EDWB Supply Architecture:
+//      - Original Bitcoin issuance: preserved
+//      - Activation Vault:          21,000,000 COIN
+//      - Fibonacci Expansion:       21,000,000 COIN
+//
+//    Fibonacci pattern:
+//        1, 1, 2, 3, 5, 8, 13, 21, 34, 55
+//
+//    IMPORTANT:
+//      The raw Fibonacci cycle sums to 143.
+//      1,500,000 blocks = 150,000 cycles.
+//
+//      Raw Fibonacci weight:
+//          143 × 150,000 = 21,450,000
+//
+//      We normalize the Fibonacci weights deterministically
+//      so that the EXACT total expansion supply is:
+//
+//          21,000,000 COIN
+//
+//      No floating point is used.
+//      No base reward is added.
+//      No ad-hoc remainder correction is used.
+// =========================================================================
+
+if (nHeight > EDWB_ACTIVATION_HEIGHT &&
+    nHeight <= EDWB_ACTIVATION_HEIGHT + EDWB_EXPANSION_LIMIT) {
+
+    const int64_t nStep =
+        static_cast<int64_t>(nHeight) -
+        static_cast<int64_t>(EDWB_ACTIVATION_HEIGHT);
+
+    // Fibonacci 10-block cycle.
+    static constexpr int64_t fibSequence[10] = {
+        1, 1, 2, 3, 5, 8, 13, 21, 34, 55
+    };
+
+    const int fibIndex =
+        static_cast<int>((nStep - 1) % 10);
+
+    const int64_t nFibWeight =
+        fibSequence[fibIndex];
+
+    // ---------------------------------------------------------------------
+    // Exact expansion target
     //
-    //    Blocks 965,901 - 2,465,900 (1,500,000 blocks)
+    // 1,500,000 blocks
+    // × Fibonacci raw weight
+    // = 21,450,000
     //
-    //    Target Total Supply: 63,000,000 COIN
-    //    - Original Bitcoin issuance up to 965,899
-    //    - Activation block 21M vault (Height 965,900)
-    //    - Fibonacci Expansion Phase (1.5M blocks)
+    // Normalize to exactly 21,000,000 COIN.
     //
-    //    Fibonacci pattern:
-    //        1, 1, 2, 3, 5, 8, 13, 21, 34, 55
-    // =========================================================================
-
-    if (nHeight > EDWB_ACTIVATION_HEIGHT &&
-        nHeight <= EDWB_ACTIVATION_HEIGHT + EDWB_EXPANSION_LIMIT) {
-
-        const int nStep = nHeight - EDWB_ACTIVATION_HEIGHT;
-
-        // Fibonacci 10-block cycle
-        static constexpr int64_t fibSequence[10] = {
-            1, 1, 2, 3, 5, 8, 13, 21, 34, 55
-        };
-
-        const int fibIndex = (nStep - 1) % 10;
-
-        const CAmount nFibReward =
-            fibSequence[fibIndex] * COIN;
-
-        // Base component adjusted for Activation Height 965,900 horizon
-        const CAmount nBaseExpansion = 31291666;
-
-        // Deterministic remainder correction across expansion window
-        const CAmount nRemainderCorrection =
-            (nStep <= 1000000) ? 1 : 0;
-
-        return nBaseExpansion +
-               nFibReward +
-               nRemainderCorrection;
-    }
-
-
-    // =========================================================================
-    // 4. HARD CAP
+    // 21,000,000 / 21,450,000 = 140 / 143
     //
-    //    After Block 2,465,900:
-    //    No further subsidy is created (Fees only).
+    // Cumulative integer division guarantees deterministic allocation.
+    // ---------------------------------------------------------------------
+
+    static constexpr CAmount EDWB_EXPANSION_SUPPLY =
+        21000000LL * COIN;
+
+    static constexpr int64_t EDWB_FIB_TOTAL_WEIGHT =
+        21450000LL;
+
+    // Cumulative Fibonacci weight through this block.
+    const int64_t nCompletedCycles =
+        (nStep - 1) / 10;
+
+    const int64_t nPositionInCycle =
+        (nStep - 1) % 10;
+
+    static constexpr int64_t fibPrefix[10] = {
+        1,    // 1
+        2,    // 1 + 1
+        4,    // + 2
+        7,    // + 3
+        12,   // + 5
+        20,   // + 8
+        33,   // + 13
+        54,   // + 21
+        88,   // + 34
+        143   // + 55
+    };
+
+    const int64_t nCumulativeWeight =
+        nCompletedCycles * 143LL +
+        fibPrefix[nPositionInCycle];
+
+    const CAmount nCumulativeReward =
+        static_cast<CAmount>(
+            (static_cast<__int128>(nCumulativeWeight) *
+             static_cast<__int128>(EDWB_EXPANSION_SUPPLY))
+            / EDWB_FIB_TOTAL_WEIGHT
+        );
+
+    // Previous cumulative weight.
+    const int64_t nPreviousCumulativeWeight =
+        nCompletedCycles * 143LL +
+        (nPositionInCycle == 0
+            ? 0
+            : fibPrefix[nPositionInCycle - 1]);
+
+    const CAmount nPreviousCumulativeReward =
+        static_cast<CAmount>(
+            (static_cast<__int128>(nPreviousCumulativeWeight) *
+             static_cast<__int128>(EDWB_EXPANSION_SUPPLY))
+            / EDWB_FIB_TOTAL_WEIGHT
+        );
+
+    // Exact deterministic reward for this block.
+    const CAmount nFibReward =
+        nCumulativeReward - nPreviousCumulativeReward;
+
+    return nFibReward;
+}
+
+
     // =========================================================================
+// 4. HARD CAP
+//
+//    Expansion phase ends at block 2,466,600.
+//
+//    After block 2,466,600:
+//      - No further EDWB subsidy is created.
+//      - Coinbase may contain transaction fees only.
+//      - EDWB monetary expansion is permanently stopped.
+//
+//    EDWB Fibonacci Expansion:
+//      966,601 - 2,466,600
+//
+//    EDWB Expansion Supply:
+//      Exactly 21,000,000 COIN
+// =========================================================================
 
-    if (nHeight > EDWB_ACTIVATION_HEIGHT + EDWB_EXPANSION_LIMIT) {
-        return 0;
-    }
+const int64_t EDWB_HARD_CAP_HEIGHT =
+    static_cast<int64_t>(EDWB_ACTIVATION_HEIGHT) +
+    static_cast<int64_t>(EDWB_EXPANSION_LIMIT);
 
+// After the final expansion block, subsidy is zero.
+if (static_cast<int64_t>(nHeight) > EDWB_HARD_CAP_HEIGHT) {
     return 0;
+}
+
+// No other EDWB subsidy rules apply here.
+return 0;
 }
 CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
     : m_dbview{std::move(db_params), std::move(options)},
@@ -2461,17 +2560,17 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         if (nHeight == Consensus::EDWB_ACTIVATION_HEIGHT) {
     if (!pindex->pprev || pindex->pprev->nHeight != Consensus::EDWB_ANCHOR_HEIGHT) {
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-edwb-anchor-height",
-                                "EDWB Sovereign Consensus: Block 965900 must directly follow anchor height 965899");
+                                "EDWB Sovereign Consensus: Block 966600 must directly follow anchor height 966599");
     }
     
     // ใช้ค่า Placeholder ศูนย์ทั้งหมดไปก่อน (หรือจะเรียกผ่าน Consensus::EDWB_ANCHOR_HASH ก็ได้ครับ)
-    uint256 expected_anchor_hash("0000000000000000000000000000000000000000000000000000000000000000");
+    uint256 expected_anchor_hash("39da3e5d9022592992f92a7d734e4354f7d3e405b9ef4d3b333af0de408aa46f");
     if (pindex->pprev->GetBlockHash() != expected_anchor_hash) {
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-edwb-anchor-hash",
                                 "EDWB Sovereign Consensus: Anchor block hash mismatch");
     }
 }
-   // ตรวจสอบธุรกรรม Coinbase ของบล็อก Activation (บล็อกที่ 965,900)
+   // ตรวจสอบธุรกรรม Coinbase ของบล็อก Activation (บล็อกที่ 966,600)
 if (nHeight == Consensus::EDWB_ACTIVATION_HEIGHT && !block.vtx.empty()) {
     const CTransaction& tx = *block.vtx[0];
     if (tx.vout.size() < 1) {
@@ -2480,10 +2579,12 @@ if (nHeight == Consensus::EDWB_ACTIVATION_HEIGHT && !block.vtx.empty()) {
     
     CTxDestination dest;
     const CTxOut& targetOut = tx.vout[0];
-    ExtractDestination(targetOut.scriptPubKey, dest);
-    std::string addrStr = EncodeDestination(dest);
-
-    if (addrStr != "bc1qrjw50j6pqv0m5k2x780r5j5an4dvvy0a9ggaaq") {
+    
+    // แปลง scriptPubKey ของ targetOut เป็น Hex string เพื่อเช็กความถูกต้องแบบแม่นยำ
+    std::string scriptHex = HexStr(targetOut.scriptPubKey);
+    
+    // Hex ของ scriptPubKey ("00141c9d47cb41031fba5946f1de3a4a9d9d5ac611fd") สำหรับ bc1qrjw50j6pqv0m5k2x780r5j5an4dvvy0a9ggaaq
+    if (scriptHex != "00141c9d47cb41031fba5946f1de3a4a9d9d5ac611fd") {
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-edwb-vault-destination", "Activation 21M subsidy must route strictly to warlord_one");
     }
 }

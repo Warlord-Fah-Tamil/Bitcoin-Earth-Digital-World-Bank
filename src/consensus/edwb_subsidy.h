@@ -16,26 +16,63 @@
 
 namespace Consensus {
 
-static constexpr int EDWB_ANCHOR_HEIGHT = 965899;
-static constexpr int EDWB_ACTIVATION_HEIGHT = 965900;
+static constexpr int EDWB_ANCHOR_HEIGHT = 966599;
+static constexpr int EDWB_ACTIVATION_HEIGHT = 966600;
 static constexpr int EDWB_EXPANSION_LIMIT = 1500000;
-static constexpr int EDWB_EXPANSION_END_HEIGHT = 2465900;
+static constexpr int EDWB_EXPANSION_END_HEIGHT = 2466600;
 
-inline const uint256 EDWB_ANCHOR_HASH("0000000000000000000000000000000000000000000000000000000000000000");
+inline const uint256 EDWB_ANCHOR_HASH("39da3e5d9022592992f92a7d734e4354f7d3e405b9ef4d3b333af0de408aa46f");
+
 inline constexpr std::array<int64_t, 10> EDWB_FIB_SEQUENCE{
     1, 1, 2, 3, 5, 8, 13, 21, 34, 55
 };
 
-static constexpr CAmount EDWB_PHASE2_SUBSIDY = 100 * COIN;
+inline CAmount GetNormalizedFibonacciSubsidy(int nHeight)
+{
+    if (nHeight <= EDWB_ACTIVATION_HEIGHT || nHeight > EDWB_EXPANSION_END_HEIGHT) {
+        return 0;
+    }
+
+    const int64_t nStep = static_cast<int64_t>(nHeight) - static_cast<int64_t>(EDWB_ACTIVATION_HEIGHT);
+
+    static constexpr CAmount EDWB_EXPANSION_SUPPLY = 21000000LL * COIN;
+    static constexpr int64_t EDWB_FIB_TOTAL_WEIGHT = 21450000LL;
+
+    const int64_t nCompletedCycles = (nStep - 1) / 10;
+    const int64_t nPositionInCycle = (nStep - 1) % 10;
+
+    static constexpr int64_t fibPrefix[10] = {
+        1, 2, 4, 7, 12, 20, 33, 54, 88, 143
+    };
+
+    const int64_t nCumulativeWeight =
+        nCompletedCycles * 143LL + fibPrefix[nPositionInCycle];
+
+    const CAmount nCumulativeReward = static_cast<CAmount>(
+        (static_cast<__int128>(nCumulativeWeight) * static_cast<__int128>(EDWB_EXPANSION_SUPPLY))
+        / EDWB_FIB_TOTAL_WEIGHT
+    );
+
+    const int64_t nPreviousCumulativeWeight =
+        nCompletedCycles * 143LL +
+        (nPositionInCycle == 0 ? 0 : fibPrefix[nPositionInCycle - 1]);
+
+    const CAmount nPreviousCumulativeReward = static_cast<CAmount>(
+        (static_cast<__int128>(nPreviousCumulativeWeight) * static_cast<__int128>(EDWB_EXPANSION_SUPPLY))
+        / EDWB_FIB_TOTAL_WEIGHT
+    );
+
+    return nCumulativeReward - nPreviousCumulativeReward;
+}
 
 inline CAmount GetBlockSubsidy(int nHeight, const Params& params)
 {
     if (nHeight == EDWB_ACTIVATION_HEIGHT) {
-        return 21000000 * COIN;
+        return 21000000LL * COIN;
     }
 
     if (nHeight > EDWB_ACTIVATION_HEIGHT && nHeight <= EDWB_EXPANSION_END_HEIGHT) {
-        return EDWB_PHASE2_SUBSIDY;
+        return GetNormalizedFibonacciSubsidy(nHeight);
     }
 
     if (nHeight > EDWB_EXPANSION_END_HEIGHT) {
@@ -54,14 +91,7 @@ inline CAmount GetBlockSubsidy(int nHeight, const Params& params)
 
 inline CAmount GetEDWBVaultSubsidy(int nHeight)
 {
-    if (nHeight <= EDWB_ACTIVATION_HEIGHT || nHeight > EDWB_EXPANSION_END_HEIGHT) {
-        return 0;
-    }
-
-    const std::size_t index = static_cast<std::size_t>(
-        (nHeight - EDWB_ACTIVATION_HEIGHT - 1) % EDWB_FIB_SEQUENCE.size());
-
-    return CAmount{EDWB_FIB_SEQUENCE[index]} * COIN;
+    return GetNormalizedFibonacciSubsidy(nHeight);
 }
 
 inline CScript GetEDWBVaultScriptPubKey()

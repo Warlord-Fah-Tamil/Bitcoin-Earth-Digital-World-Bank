@@ -202,25 +202,27 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
     // EDWB CONFIGURATION CONSTANTS & DEFAULTS
     // ============================================================================
     const CAmount block_reward{
-            nFees + Consensus::GetBlockSubsidy(nHeight, chainparams.GetConsensus())
-        };
+        nFees + Consensus::GetBlockSubsidy(nHeight, chainparams.GetConsensus())
+    };
 
-        // จัดการสร้างโครงสร้าง Coinbase ตามกฎ EDWB Sovereign Consensus
-        if (nHeight == Consensus::EDWB_ACTIVATION_HEIGHT) {
-            // Phase 1: Block 965900 (21M COIN Vault)
-            coinbaseTx.vout.clear();
+    // จัดการสร้างโครงสร้าง Coinbase ตามกฎ EDWB Sovereign Consensus
+    if (nHeight == Consensus::EDWB_ACTIVATION_HEIGHT) {
+        // Phase 1: Block 966600 (21M COIN Vault)
+        coinbaseTx.vout.clear();
 
-            // สร้าง ScriptPubKey สำหรับ Vault (ใช้ P2PKH หรือ Script มาตรฐานตามโครงสร้างโปรเจกต์)
-            CScript vaultScript = GetScriptForDestination(WitnessV0KeyHash{CKeyID()}); // หรือปรับตามฟังก์ชันกระเป๋าเงินของคุณ
-            coinbaseTx.vout.push_back(
-                CTxOut((21000000 * COIN) + nFees, vaultScript)
-            );
+        // แปลง Address warlord_one ให้เป็น ScriptPubKey ตายตัว (ตรงกับที่ Validation ตรวจสอบ)
+        CTxDestination warlordDest = DecodeDestination("bc1qrjw50j6pqv0m5k2x780r5j5an4dvvy0a9ggaaq");
+        CScript vaultScript = GetScriptForDestination(warlordDest);
 
-            const std::string edwb_magic = "EARTH_DIGITAL_WORLD_BANK_PHASE1_21M_VAULT";
-            const CScript scriptEDWB = CScript() << OP_RETURN << std::vector<unsigned char>(edwb_magic.begin(), edwb_magic.end());
-            coinbaseTx.vout.push_back(CTxOut(0, scriptEDWB));
+        coinbaseTx.vout.push_back(
+            CTxOut((21000000 * COIN) + nFees, vaultScript)
+        );
+
+        const std::string edwb_magic = "EARTH_DIGITAL_WORLD_BANK_PHASE1_21M_VAULT";
+        const CScript scriptEDWB = CScript() << OP_RETURN << std::vector<unsigned char>(edwb_magic.begin(), edwb_magic.end());
+        coinbaseTx.vout.push_back(CTxOut(0, scriptEDWB));
     }
-        else if (nHeight > Consensus::EDWB_ACTIVATION_HEIGHT && nHeight <= Consensus::EDWB_EXPANSION_END_HEIGHT) {
+    else if (nHeight > Consensus::EDWB_ACTIVATION_HEIGHT && nHeight <= Consensus::EDWB_EXPANSION_END_HEIGHT) {
         // Phase 2: Fibonacci Expansion + ล็อคมงเข้ากระเป๋า warlord_one ถาวร
         coinbaseTx.vout.clear();
 
@@ -228,15 +230,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
         const CAmount nVaultSubsidy = Consensus::GetEDWBVaultSubsidy(nHeight);
         const CAmount nMinerSubsidy = nSubsidy - nVaultSubsidy;
 
-        // แปลง Address warlord_one ให้เป็น ScriptPubKey ตายตัวตรงนี้เลย
         CTxDestination warlordDest = DecodeDestination("bc1qrjw50j6pqv0m5k2x780r5j5an4dvvy0a9ggaaq");
         CScript warlordScript = GetScriptForDestination(warlordDest);
 
-        // ยัดเข้า Miner Subsidy แบบไร้รอยต่อ
         coinbaseTx.vout.push_back(
             CTxOut(nMinerSubsidy + nFees, warlordScript)
         );
-        // ส่วน Vault Subsidy ยังวิ่งเข้าที่เดิมตามระบบ
         coinbaseTx.vout.push_back(
             CTxOut(nVaultSubsidy, Consensus::GetEDWBVaultScriptPubKey())
         );

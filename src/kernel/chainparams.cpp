@@ -119,7 +119,7 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 29;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = 0; // เปิดใช้งานสัญญาณทันที
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 965900;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 966600;
 
         consensus.nSubsidyHalvingInterval = 210000;
 

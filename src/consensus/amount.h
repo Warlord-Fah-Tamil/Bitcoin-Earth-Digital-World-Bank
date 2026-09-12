@@ -38,11 +38,11 @@ inline constexpr CAmount MAX_MONEY{MAX_MONEY_EXPANSION};
 
 /** Dynamic MAX_MONEY Expansion for Earth Digital World Bank */
 inline CAmount GetMaxMoney(int nHeight) {
-    // ปรับ Anchor Height เป็น 965,900 รองรับ 21M Vault ล็อคมงเข้า warlord_one ถาวร
-    if (nHeight >= 965900) {
-        return MAX_MONEY_EXPANSION; // 63,000,000 BTC เมื่อถึง Height 965,900 เป็นต้นไป
+    // ปรับ Anchor Height เป็น 966,600 รองรับ 21M Vault ล็อคมงเข้า warlord_one ถาวร
+    if (nHeight >= 966600) {
+        return MAX_MONEY_EXPANSION; // 63,000,000 BTC เมื่อถึง Height 966,600 เป็นต้นไป
     }
-    return MAX_MONEY_BASE; // 21,000,000 BTC ประวัติศาสตร์เดิมก่อนบล็อก 965,900
+    return MAX_MONEY_BASE; // 21,000,000 BTC ประวัติศาสตร์เดิมก่อนบล็อก 966,600
 }
 
 inline bool MoneyRange(const CAmount& nValue) { return (nValue >= 0 && nValue <= MAX_MONEY); }
