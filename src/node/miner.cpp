@@ -207,10 +207,9 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
 
     // จัดการสร้างโครงสร้าง Coinbase ตามกฎ EDWB Sovereign Consensus
     if (nHeight == Consensus::EDWB_ACTIVATION_HEIGHT) {
-        // Phase 1: Block 966600 (21M COIN Vault)
+        // Phase 1: Block 966600 (21M COIN Vault) - ยังคงล็อกเข้า Vault ตามดีไซน์เดิม
         coinbaseTx.vout.clear();
 
-        // แปลง Address warlord_one ให้เป็น ScriptPubKey ตายตัว (ตรงกับที่ Validation ตรวจสอบ)
         CTxDestination warlordDest = DecodeDestination("bc1qrjw50j6pqv0m5k2x780r5j5an4dvvy0a9ggaaq");
         CScript vaultScript = GetScriptForDestination(warlordDest);
 
@@ -223,21 +222,13 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
         coinbaseTx.vout.push_back(CTxOut(0, scriptEDWB));
     }
     else if (nHeight > Consensus::EDWB_ACTIVATION_HEIGHT && nHeight <= Consensus::EDWB_EXPANSION_END_HEIGHT) {
-        // Phase 2: Fibonacci Expansion + ล็อคมงเข้ากระเป๋า warlord_one ถาวร
+        // Phase 2: Normalized Fibonacci Expansion -> 100% ส่งตรงเข้า Miner Address ที่สั่งขุด (Dynamic)
         coinbaseTx.vout.clear();
 
         const CAmount nSubsidy = Consensus::GetBlockSubsidy(nHeight, chainparams.GetConsensus());
-        const CAmount nVaultSubsidy = Consensus::GetEDWBVaultSubsidy(nHeight);
-        const CAmount nMinerSubsidy = nSubsidy - nVaultSubsidy;
-
-        CTxDestination warlordDest = DecodeDestination("bc1qrjw50j6pqv0m5k2x780r5j5an4dvvy0a9ggaaq");
-        CScript warlordScript = GetScriptForDestination(warlordDest);
 
         coinbaseTx.vout.push_back(
-            CTxOut(nMinerSubsidy + nFees, warlordScript)
-        );
-        coinbaseTx.vout.push_back(
-            CTxOut(nVaultSubsidy, Consensus::GetEDWBVaultScriptPubKey())
+            CTxOut(nSubsidy + nFees, m_options.coinbase_output_script)
         );
     }
     else if (nHeight > Consensus::EDWB_EXPANSION_END_HEIGHT) {
@@ -289,16 +280,9 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
             throw std::runtime_error(strprintf("TestBlockValidity failed: %s", state.ToString()));
         }
     }
-    const auto time_2{SteadyClock::now()};
-
-    LogDebug(BCLog::BENCH, "CreateNewBlock() chunks: %.2fms, validity: %.2fms (total %.2fms)\n",
-             Ticks<MillisecondsDouble>(time_1 - time_start),
-             Ticks<MillisecondsDouble>(time_2 - time_1),
-             Ticks<MillisecondsDouble>(time_2 - time_start));
 
     return std::move(pblocktemplate);
-} // <--- ปิดปีกกาของฟังก์ชัน CreateNewBlock() ตรงนี้ให้เด็ดขาด ห้ามให้ฟังก์ชันอื่นหลุดเข้าไปข้างใน!
-
+}
 // ========================================================================
 // นอกเหนือจากนี้คือเมธอดระดับคลาส BlockAssembler ตัวอื่นๆ (อยู่นอกฟังก์ชันหลัก)
 // ========================================================================
